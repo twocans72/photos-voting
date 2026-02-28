@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  photos-voting:
+    build: .
+    # Oder mit vorgefertigtem Image:
+    # image: photos-voting:latest
+    container_name: photos-voting
+    restart: unless-stopped
+    ports:
+      - "3100:3000"   # Port 3100 auf der Synology, intern 3000
+    volumes:
+      - ./data:/data  # SQLite Datenbank persistieren
+    environment:
+      # Immich - interner Docker-Netzwerkname oder IP
+      IMMICH_URL: http://immich_server:2283
+      IMMICH_API_KEY: ${IMMICH_API_KEY}
+      
+      # App Security
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      NEXTAUTH_URL: https://photos.peduzzi.gr
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      
+      # Datenbank
+      DATABASE_PATH: /data/voting.db
+      
+      # Optional: SMTP für Verlosungs-Benachrichtigungen
+      # SMTP_HOST: smtp.example.com
+      # SMTP_PORT: 587
+      # SMTP_USER: user@example.com
+      # SMTP_PASS: password
+      # SMTP_FROM: noreply@peduzzi.gr
+      
+    networks:
+      - immich_default  # Gleiches Netzwerk wie Immich für internen Zugriff
+
+networks:
+  immich_default:
+    external: true  # Muss dem tatsächlichen Immich-Netzwerknamen entsprechen
