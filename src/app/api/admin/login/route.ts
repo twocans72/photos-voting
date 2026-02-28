@@ -8,34 +8,17 @@ import { verifyPassword, generateToken, createAdminSession, hashPassword } from 
 export async function POST(request: NextRequest) {
   const { username, password } = await request.json()
   const db = getDb()
-
-  const countResult = await db.execute({ sql: 'SELECT COUNT(*) as count FROM admins', args: [] })
-  const count = countResult.rows[0].count as number
+  const count = (db.prepare('SELECT COUNT(*) as count FROM admins').get() as { count: number }).count
   if (count === 0) {
-    const defaultPassword = process.env.ADMIN_PASSWORD || 'changeme'
-    await db.execute({
-      sql: 'INSERT INTO admins (username, password_hash) VALUES (?, ?)',
-      args: ['admin', hashPassword(defaultPassword)]
-    })
+    db.prepare('INSERT INTO admins (username, password_hash) VALUES (?, ?)').run('admin', hashPassword(process.env.ADMIN_PASSWORD || 'changeme'))
   }
-
-  const result = await db.execute({ sql: 'SELECT * FROM admins WHERE username = ?', args: [username] })
-  const admin = result.rows[0]
-
-  if (!admin || !verifyPassword(password, admin.password_hash as string)) {
+  const admin = db.prepare('SELECT * FROM admins WHERE username = ?').get(username) as { password_hash: string } | undefined
+  if (!admin || !verifyPassword(password, admin.password_hash)) {
     return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
   }
-
   const token = generateToken()
-  await createAdminSession(token)
-
+  createAdminSession(token)
   const response = NextResponse.json({ success: true })
-  response.cookies.set('admin_token', token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 86400,
-    path: '/',
-  })
+  response.cookies.set('admin_token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: 86400, path: '/' })
   return response
 }

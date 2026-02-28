@@ -21,23 +21,20 @@ export function hashIp(ip: string): string {
   return createHash('sha256').update(ip + (process.env.NEXTAUTH_SECRET || '')).digest('hex').slice(0, 16)
 }
 
-export async function createAdminSession(token: string): Promise<void> {
+export function createAdminSession(token: string): void {
   const db = getDb()
   const expires = new Date(Date.now() + SESSION_DURATION).toISOString()
-  await db.execute({ sql: 'INSERT INTO admin_sessions (token, expires_at) VALUES (?, ?)', args: [token, expires] })
-  await db.execute({ sql: 'DELETE FROM admin_sessions WHERE expires_at < datetime("now")', args: [] })
+  db.prepare('INSERT INTO admin_sessions (token, expires_at) VALUES (?, ?)').run(token, expires)
+  db.prepare('DELETE FROM admin_sessions WHERE expires_at < datetime("now")').run()
 }
 
-export async function validateAdminSession(token: string): Promise<boolean> {
+export function validateAdminSession(token: string): boolean {
   const db = getDb()
-  const result = await db.execute({
-    sql: 'SELECT id FROM admin_sessions WHERE token = ? AND expires_at > datetime("now")',
-    args: [token]
-  })
-  return result.rows.length > 0
+  const session = db.prepare('SELECT id FROM admin_sessions WHERE token = ? AND expires_at > datetime("now")').get(token)
+  return !!session
 }
 
-export async function getAdminFromRequest(): Promise<boolean> {
+export function getAdminFromRequest(): boolean {
   const cookieStore = cookies()
   const token = cookieStore.get('admin_token')?.value
   if (!token) return false
