@@ -2,9 +2,8 @@ version: '3.8'
 
 services:
   photos-voting:
-    build: .
-    # Oder mit vorgefertigtem Image:
-    # image: photos-voting:latest
+    image: ghcr.io/twocans72/photos-voting:latest
+
     container_name: photos-voting
     restart: unless-stopped
     ports:
@@ -24,12 +23,7 @@ services:
       # Datenbank
       DATABASE_PATH: /data/voting.db
       
-      # Optional: SMTP für Verlosungs-Benachrichtigungen
-      # SMTP_HOST: smtp.example.com
-      # SMTP_PORT: 587
-      # SMTP_USER: user@example.com
-      # SMTP_PASS: password
-      # SMTP_FROM: noreply@peduzzi.gr
+
       
     networks:
       - immich_default  # Gleiches Netzwerk wie Immich für internen Zugriff
