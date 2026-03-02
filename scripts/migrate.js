@@ -64,10 +64,31 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS admin_sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     token TEXT NOT NULL UNIQUE,
-    expires_at DATETIME NOT NULL,
+    expires_at INTEGER NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 `)
+
+// Migration: fix expires_at column if it's still TEXT type
+try {
+  const col = db.prepare("SELECT type FROM pragma_table_info('admin_sessions') WHERE name='expires_at'").get()
+  if (col && col.type !== 'INTEGER') {
+    db.exec(`
+      DROP TABLE IF EXISTS admin_sessions_old;
+      ALTER TABLE admin_sessions RENAME TO admin_sessions_old;
+      CREATE TABLE admin_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        token TEXT NOT NULL UNIQUE,
+        expires_at INTEGER NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      DROP TABLE admin_sessions_old;
+    `)
+    console.log('✅ Migrated admin_sessions.expires_at to INTEGER')
+  }
+} catch(e) {
+  console.log('Migration check skipped:', e.message)
+}
 
 console.log('✅ Database migrated:', dbPath)
 db.close()
