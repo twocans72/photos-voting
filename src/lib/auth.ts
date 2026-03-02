@@ -23,14 +23,14 @@ export function hashIp(ip: string): string {
 
 export function createAdminSession(token: string): void {
   const db = getDb()
-  const expires = Date.now() + SESSION_DURATION
+  const expires = new Date(Date.now() + SESSION_DURATION).toISOString()
   db.prepare('INSERT INTO admin_sessions (token, expires_at) VALUES (?, ?)').run(token, expires)
-  db.prepare('DELETE FROM admin_sessions WHERE expires_at < ?').run(Date.now())
+  db.prepare('DELETE FROM admin_sessions WHERE expires_at < datetime("now")').run()
 }
 
 export function validateAdminSession(token: string): boolean {
   const db = getDb()
-  const session = db.prepare('SELECT id FROM admin_sessions WHERE token = ? AND expires_at > ?').get(token, Date.now())
+  const session = db.prepare('SELECT id FROM admin_sessions WHERE token = ? AND expires_at > datetime("now")').get(token)
   return !!session
 }
 
