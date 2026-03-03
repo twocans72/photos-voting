@@ -40,7 +40,6 @@ export function validateAdminSession(token: string): boolean {
   const session = db.prepare('SELECT id FROM admin_sessions WHERE token = ? AND expires_at > ?').get(token, Date.now())
   return !!session
 }
-}
 
 export function generateSessionToken(): string {
   return randomBytes(16).toString('hex')
