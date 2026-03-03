@@ -15,14 +15,3 @@ export async function POST(request: NextRequest) {
   }
   return NextResponse.json({ ok: true })
 }
-```
-
----
-
-**2. `src/app/api/admin/albums/route.ts`** – eine Zeile ändern, `ORDER BY` von:
-```
-ORDER BY a.updated_at DESC
-```
-auf:
-```
-ORDER BY a.sort_order ASC, a.updated_at DESC
