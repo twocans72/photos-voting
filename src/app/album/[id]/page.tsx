@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { Album, getVotingStatus, VoteStats } from '@/types'
@@ -10,6 +10,7 @@ import { useLang, LangToggle } from '@/lib/LanguageContext'
 type PickSlot = 1 | 2 | 3
 type SortKey = 'dateDesc' | 'dateAsc' | 'name' | 'random' | 'score'
 type Tab = 'photos' | 'results'
+type AssetSize = 'hero' | 'wide' | 'normal'
 
 interface AlbumWithStatus extends Album {
   votingStatus?: ReturnType<typeof getVotingStatus>
@@ -19,6 +20,57 @@ const RANK_COLORS = {
   1: { ring: 'ring-yellow-400', badge: 'bg-yellow-400 text-black', btn: 'bg-yellow-400 text-black hover:bg-yellow-300', label: '🥇' },
   2: { ring: 'ring-gray-300', badge: 'bg-gray-300 text-black', btn: 'bg-gray-300 text-black hover:bg-gray-200', label: '🥈' },
   3: { ring: 'ring-amber-600', badge: 'bg-amber-600 text-white', btn: 'bg-amber-600 text-white hover:bg-amber-500', label: '🥉' },
+}
+
+// Row height variants in px
+const ROW_HEIGHTS = [220, 280, 340, 260, 300]
+
+// Generate a stable random layout for the assets
+// Rules: no two heroes in a row, mix of heights
+function generateLayout(count: number): { size: AssetSize; rowHeight: number }[] {
+  const layout: { size: AssetSize; rowHeight: number }[] = []
+  let lastWasHero = false
+  let colsUsed = 0 // track columns used in current row (grid is 3 cols)
+  let rowHeightIndex = Math.floor(Math.random() * ROW_HEIGHTS.length)
+
+  for (let i = 0; i < count; i++) {
+    const rand = Math.random()
+    let size: AssetSize
+
+    // Hero: full width, ~10% chance, not after another hero, only when starting fresh row
+    if (!lastWasHero && colsUsed === 0 && rand < 0.12) {
+      size = 'hero'
+      lastWasHero = true
+      colsUsed = 0 // hero fills full row
+      rowHeightIndex = (rowHeightIndex + 1 + Math.floor(Math.random() * 3)) % ROW_HEIGHTS.length
+    } else if (colsUsed === 0 && rand < 0.35) {
+      // Wide: 2 cols, ~35% chance when starting a row
+      size = 'wide'
+      lastWasHero = false
+      colsUsed = 2
+    } else if (colsUsed === 2) {
+      // Only 1 col left in row
+      size = 'normal'
+      lastWasHero = false
+      colsUsed = 0
+      rowHeightIndex = (rowHeightIndex + 1 + Math.floor(Math.random() * 2)) % ROW_HEIGHTS.length
+    } else if (colsUsed === 1 && rand < 0.5) {
+      size = 'wide'
+      lastWasHero = false
+      colsUsed = 0
+      rowHeightIndex = (rowHeightIndex + 1 + Math.floor(Math.random() * 2)) % ROW_HEIGHTS.length
+    } else {
+      size = 'normal'
+      lastWasHero = false
+      colsUsed = (colsUsed + 1) % 3
+      if (colsUsed === 0) {
+        rowHeightIndex = (rowHeightIndex + 1 + Math.floor(Math.random() * 2)) % ROW_HEIGHTS.length
+      }
+    }
+
+    layout.push({ size, rowHeight: ROW_HEIGHTS[rowHeightIndex] })
+  }
+  return layout
 }
 
 function sortAssets(assets: ImmichAsset[], sort: SortKey, stats: { stats: VoteStats[] } | null): ImmichAsset[] {
@@ -34,61 +86,6 @@ function sortAssets(assets: ImmichAsset[], sort: SortKey, stats: { stats: VoteSt
     }
     default: return arr
   }
-}
-
-function PhotoCell({ asset, large, isPickable, picks, submitted, votingStatus, onRankClick, onLightbox, stats, getRankForAsset, getStatsForAsset }: {
-  asset: ImmichAsset
-  large?: boolean
-  isPickable: boolean
-  picks: Record<PickSlot, string | null>
-  submitted: boolean
-  votingStatus: ReturnType<typeof getVotingStatus>
-  onRankClick: (id: string, rank: PickSlot, e: React.MouseEvent) => void
-  onLightbox: (id: string) => void
-  stats: { totalVotes: number; stats: VoteStats[] } | null
-  getRankForAsset: (id: string) => PickSlot | null
-  getStatsForAsset: (id: string) => VoteStats | undefined
-}) {
-  const rank = getRankForAsset(asset.id)
-  const assetStats = getStatsForAsset(asset.id)
-  return (
-    <div className={`relative group overflow-hidden h-full ${rank ? 'ring-2 ' + RANK_COLORS[rank].ring : ''}`}>
-      <img
-        src={`/api/proxy/thumbnail/${asset.id}?size=preview`}
-        alt={asset.originalFileName}
-        className={`w-full block cursor-zoom-in object-cover ${large ? 'h-full' : 'aspect-square'}`}
-        loading="lazy"
-        onClick={() => onLightbox(asset.id)}
-      />
-      {rank && (
-        <div className={`absolute top-2 left-2 w-7 h-7 flex items-center justify-center text-xs z-10 ${RANK_COLORS[rank].badge}`}>
-          {RANK_COLORS[rank].label}
-        </div>
-      )}
-      {isPickable && (
-        <div className="absolute bottom-0 left-0 right-0 flex justify-center gap-1 p-1 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-          {([1, 2, 3] as PickSlot[]).map(r => {
-            const isActive = picks[r] === asset.id
-            const isTaken = picks[r] !== null && picks[r] !== asset.id
-            return (
-              <button key={r} onClick={e => onRankClick(asset.id, r, e)}
-                className={`px-1.5 py-0.5 text-xs font-bold transition-all ${isActive ? RANK_COLORS[r].btn + ' ring-1 ring-white' : isTaken ? 'bg-white/10 text-white/30 cursor-not-allowed' : RANK_COLORS[r].btn}`}>
-                {RANK_COLORS[r].label}
-              </button>
-            )
-          })}
-        </div>
-      )}
-      {(submitted || votingStatus.hasEnded) && assetStats && (
-        <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-0.5 p-2 pointer-events-none">
-          {assetStats.rank1_count > 0 && <div className="text-yellow-400 text-xs font-medium">🥇 {assetStats.rank1_count}x</div>}
-          {assetStats.rank2_count > 0 && <div className="text-gray-300 text-xs font-medium">🥈 {assetStats.rank2_count}x</div>}
-          {assetStats.rank3_count > 0 && <div className="text-amber-600 text-xs font-medium">🥉 {assetStats.rank3_count}x</div>}
-          <div className="text-white/60 text-xs mt-0.5">Score: {assetStats.score}</div>
-        </div>
-      )}
-    </div>
-  )
 }
 
 export default function AlbumPage() {
@@ -110,6 +107,7 @@ export default function AlbumPage() {
   const [sortKey, setSortKey] = useState<SortKey>('dateDesc')
   const [activeTab, setActiveTab] = useState<Tab>('photos')
   const [showBackToTop, setShowBackToTop] = useState(false)
+  const [layout, setLayout] = useState<{ size: AssetSize; rowHeight: number }[]>([])
 
   useEffect(() => {
     const onScroll = () => setShowBackToTop(window.scrollY > 400)
@@ -126,7 +124,10 @@ export default function AlbumPage() {
     ]).then(([albums, assetsData, voteStatus, statsData]) => {
       const found = (albums as Album[]).find(a => a.id === parseInt(albumId))
       if (found) setAlbum({ ...found, votingStatus: getVotingStatus(found) })
-      if (Array.isArray(assetsData)) setAssets(assetsData)
+      if (Array.isArray(assetsData)) {
+        setAssets(assetsData)
+        setLayout(generateLayout(assetsData.length))
+      }
       if (voteStatus.voted && voteStatus.vote) {
         setPicks({ 1: voteStatus.vote.rank1_asset_id, 2: voteStatus.vote.rank2_asset_id, 3: voteStatus.vote.rank3_asset_id })
         setSubmitted(true)
@@ -195,16 +196,6 @@ export default function AlbumPage() {
   const isPickable = votingStatus.isOpen && !submitted
   const picksCount = [picks[1], picks[2], picks[3]].filter(Boolean).length
 
-  // Google Photos style: groups of 5 (1 large + 4 small)
-  const groups: { large: ImmichAsset; small: ImmichAsset[] }[] = []
-  for (let i = 0; i < sortedAssets.length; i += 5) {
-    const chunk = sortedAssets.slice(i, i + 5)
-    if (chunk.length === 0) break
-    groups.push({ large: chunk[0], small: chunk.slice(1) })
-  }
-
-  const photoCellProps = { isPickable, picks, submitted, votingStatus, onRankClick: handleRankClick, onLightbox: setLightbox, stats, getRankForAsset, getStatsForAsset }
-
   return (
     <div className="grain min-h-screen">
       <header className="border-b border-surface-3 px-8 py-5 flex items-center gap-6">
@@ -219,7 +210,6 @@ export default function AlbumPage() {
 
       <div className="max-w-7xl mx-auto px-8 py-8">
 
-        {/* Voting Banner */}
         {votingStatus.isOpen && !submitted && (
           <div className="mb-6 p-5 border border-accent/30 bg-accent/5">
             <p className="font-display text-xl text-accent mb-1">{t.chooseTop3}</p>
@@ -290,17 +280,13 @@ export default function AlbumPage() {
         {/* Tabs + Sort */}
         <div className="flex items-center justify-between mb-6 border-b border-surface-3">
           <div className="flex">
-            <button
-              onClick={() => setActiveTab('photos')}
-              className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${activeTab === 'photos' ? 'border-accent text-accent' : 'border-transparent text-text-muted hover:text-text-primary'}`}
-            >
+            <button onClick={() => setActiveTab('photos')}
+              className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${activeTab === 'photos' ? 'border-accent text-accent' : 'border-transparent text-text-muted hover:text-text-primary'}`}>
               {t.tabPhotos} ({assets.length})
             </button>
             {showResultsTab && (
-              <button
-                onClick={() => setActiveTab('results')}
-                className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${activeTab === 'results' ? 'border-accent text-accent' : 'border-transparent text-text-muted hover:text-text-primary'}`}
-              >
+              <button onClick={() => setActiveTab('results')}
+                className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${activeTab === 'results' ? 'border-accent text-accent' : 'border-transparent text-text-muted hover:text-text-primary'}`}>
                 {t.tabResults} {stats ? `(${stats.totalVotes})` : ''}
               </button>
             )}
@@ -318,18 +304,55 @@ export default function AlbumPage() {
 
         {/* Photos Tab */}
         {activeTab === 'photos' && (
-          <div className="space-y-0.5">
-            {groups.map((group, gi) => (
-              <div key={gi} className={`grid gap-0.5 ${group.small.length > 0 ? 'grid-cols-3' : 'grid-cols-1'}`}
-                style={{ gridTemplateRows: group.small.length > 0 ? 'repeat(2, 200px)' : '400px' }}>
-                <div className="row-span-2">
-                  <PhotoCell asset={group.large} large {...photoCellProps} />
+          <div className="grid grid-cols-3 gap-1">
+            {sortedAssets.map((asset, index) => {
+              const l = layout[index] || { size: 'normal', rowHeight: 260 }
+              const rank = getRankForAsset(asset.id)
+              const assetStats = getStatsForAsset(asset.id)
+              const colSpan = l.size === 'hero' ? 'col-span-3' : l.size === 'wide' ? 'col-span-2' : 'col-span-1'
+
+              return (
+                <div key={asset.id}
+                  className={`relative group overflow-hidden ${colSpan} ${rank ? 'ring-2 ' + RANK_COLORS[rank as PickSlot].ring : ''}`}
+                  style={{ height: `${l.rowHeight}px` }}
+                >
+                  <img
+                    src={`/api/proxy/thumbnail/${asset.id}?size=preview`}
+                    alt={asset.originalFileName}
+                    className="w-full h-full object-cover cursor-zoom-in transition-transform duration-500 group-hover:scale-105"
+                    loading="lazy"
+                    onClick={() => setLightbox(asset.id)}
+                  />
+                  {rank && (
+                    <div className={`absolute top-2 left-2 w-7 h-7 flex items-center justify-center text-xs z-10 ${RANK_COLORS[rank as PickSlot].badge}`}>
+                      {RANK_COLORS[rank as PickSlot].label}
+                    </div>
+                  )}
+                  {isPickable && (
+                    <div className="absolute bottom-0 left-0 right-0 flex justify-center gap-1 p-1.5 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                      {([1, 2, 3] as PickSlot[]).map(r => {
+                        const isActive = picks[r] === asset.id
+                        const isTaken = picks[r] !== null && picks[r] !== asset.id
+                        return (
+                          <button key={r} onClick={e => handleRankClick(asset.id, r, e)}
+                            className={`px-2 py-1 text-xs font-bold transition-all ${isActive ? RANK_COLORS[r].btn + ' ring-1 ring-white' : isTaken ? 'bg-white/10 text-white/30 cursor-not-allowed' : RANK_COLORS[r].btn}`}>
+                            {RANK_COLORS[r].label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                  {(submitted || votingStatus.hasEnded) && assetStats && (
+                    <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1 p-3 pointer-events-none">
+                      {assetStats.rank1_count > 0 && <div className="text-yellow-400 text-sm font-medium">🥇 {assetStats.rank1_count}x</div>}
+                      {assetStats.rank2_count > 0 && <div className="text-gray-300 text-sm font-medium">🥈 {assetStats.rank2_count}x</div>}
+                      {assetStats.rank3_count > 0 && <div className="text-amber-600 text-sm font-medium">🥉 {assetStats.rank3_count}x</div>}
+                      <div className="text-white/60 text-xs mt-1">Score: {assetStats.score}</div>
+                    </div>
+                  )}
                 </div>
-                {group.small.map(asset => (
-                  <PhotoCell key={asset.id} asset={asset} {...photoCellProps} />
-                ))}
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
 
@@ -349,7 +372,7 @@ export default function AlbumPage() {
                         <span className="font-display text-base text-text-primary">{t.place(i + 1)}</span>
                         <span className="text-text-muted text-xs ml-auto">Score: {s.score}</span>
                       </div>
-                      <img src={`/api/proxy/thumbnail/${s.asset_id}?size=preview`} alt="" className="w-full aspect-[4/3] object-cover mb-3 cursor-zoom-in" onClick={() => setLightbox(s.asset_id)} />
+                      <img src={`/api/proxy/thumbnail/${s.asset_id}?size=preview`} alt="" className="w-full h-auto mb-3 cursor-zoom-in" onClick={() => setLightbox(s.asset_id)} />
                       <div className="text-xs text-text-secondary space-y-0.5">
                         {s.rank1_count > 0 && <div>🥇 {s.rank1_count}{t.onPlace(1)}</div>}
                         {s.rank2_count > 0 && <div>🥈 {s.rank2_count}{t.onPlace(2)}</div>}
@@ -364,7 +387,7 @@ export default function AlbumPage() {
                     <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-7 gap-1">
                       {stats.stats.map((s, i) => (
                         <div key={s.asset_id} className="relative group cursor-zoom-in" onClick={() => setLightbox(s.asset_id)}>
-                          <img src={`/api/proxy/thumbnail/${s.asset_id}?size=thumbnail`} alt="" className="w-full aspect-square object-cover" />
+                          <img src={`/api/proxy/thumbnail/${s.asset_id}?size=thumbnail`} alt="" className="w-full h-auto" />
                           <div className="absolute top-1 left-1 text-xs bg-black/70 text-white px-1 py-0.5">
                             {i < 3 ? ['🥇','🥈','🥉'][i] : `#${i+1}`}
                           </div>
@@ -382,17 +405,13 @@ export default function AlbumPage() {
         )}
       </div>
 
-      {/* Back to top */}
       {showBackToTop && (
-        <button
-          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-          className="fixed bottom-6 right-6 z-40 bg-surface-2 border border-surface-3 text-text-muted hover:text-accent hover:border-accent transition-colors px-3 py-2 text-xs"
-        >
-          ↑ {t.backToTop}
+        <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          className="fixed bottom-6 right-6 z-40 bg-surface-2 border border-surface-3 text-text-muted hover:text-accent hover:border-accent transition-colors px-3 py-2 text-xs">
+          {t.backToTop}
         </button>
       )}
 
-      {/* Lightbox */}
       {lightbox && (
         <div className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-4" onClick={() => setLightbox(null)}>
           <button className="absolute top-4 right-4 text-white/60 hover:text-white text-2xl z-10" onClick={() => setLightbox(null)}>x</button>
