@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { Album, getVotingStatus, VoteStats } from '@/types'
@@ -10,7 +10,10 @@ import { useLang, LangToggle } from '@/lib/LanguageContext'
 type PickSlot = 1 | 2 | 3
 type SortKey = 'dateDesc' | 'dateAsc' | 'name' | 'random' | 'score'
 type Tab = 'photos' | 'results'
-type AssetSize = 'hero' | 'wide' | 'normal'
+type AssetSize = 'wide' | 'normal' // wide = col-span-2, normal = col-span-1
+
+const ROW_HEIGHT_NORMAL = 260
+const ROW_HEIGHT_TALL = 325 // 1.25x
 
 interface AlbumWithStatus extends Album {
   votingStatus?: ReturnType<typeof getVotingStatus>
@@ -22,55 +25,69 @@ const RANK_COLORS = {
   3: { ring: 'ring-amber-600', badge: 'bg-amber-600 text-white', btn: 'bg-amber-600 text-white hover:bg-amber-500', label: '🥉' },
 }
 
-// Row height variants in px
-const ROW_HEIGHTS = [220, 280, 340, 260, 300]
+// A row is always exactly 3 columns.
+// Each row has a fixed height (normal or tall) chosen randomly.
+// Within a row: generate a mix of wide (2-col) and normal (1-col) cells that sum to exactly 3 cols.
+interface RowDef {
+  height: number
+  cells: AssetSize[] // e.g. ['wide','normal'] or ['normal','normal','normal'] or ['normal','wide']
+}
 
-// Generate a stable random layout for the assets
-// Rules: no two heroes in a row, mix of heights
-function generateLayout(count: number): { size: AssetSize; rowHeight: number }[] {
-  const layout: { size: AssetSize; rowHeight: number }[] = []
-  let lastWasHero = false
-  let colsUsed = 0 // track columns used in current row (grid is 3 cols)
-  let rowHeightIndex = Math.floor(Math.random() * ROW_HEIGHTS.length)
+function generateRows(count: number): RowDef[] {
+  const rows: RowDef[] = []
+  let remaining = count
 
-  for (let i = 0; i < count; i++) {
-    const rand = Math.random()
-    let size: AssetSize
+  while (remaining > 0) {
+    const tall = Math.random() < 0.3 // 30% chance of tall row
+    const height = tall ? ROW_HEIGHT_TALL : ROW_HEIGHT_NORMAL
 
-    // Hero: full width, ~10% chance, not after another hero, only when starting fresh row
-    if (!lastWasHero && colsUsed === 0 && rand < 0.12) {
-      size = 'hero'
-      lastWasHero = true
-      colsUsed = 0 // hero fills full row
-      rowHeightIndex = (rowHeightIndex + 1 + Math.floor(Math.random() * 3)) % ROW_HEIGHTS.length
-    } else if (colsUsed === 0 && rand < 0.35) {
-      // Wide: 2 cols, ~35% chance when starting a row
-      size = 'wide'
-      lastWasHero = false
-      colsUsed = 2
-    } else if (colsUsed === 2) {
-      // Only 1 col left in row
-      size = 'normal'
-      lastWasHero = false
-      colsUsed = 0
-      rowHeightIndex = (rowHeightIndex + 1 + Math.floor(Math.random() * 2)) % ROW_HEIGHTS.length
-    } else if (colsUsed === 1 && rand < 0.5) {
-      size = 'wide'
-      lastWasHero = false
-      colsUsed = 0
-      rowHeightIndex = (rowHeightIndex + 1 + Math.floor(Math.random() * 2)) % ROW_HEIGHTS.length
-    } else {
-      size = 'normal'
-      lastWasHero = false
-      colsUsed = (colsUsed + 1) % 3
-      if (colsUsed === 0) {
-        rowHeightIndex = (rowHeightIndex + 1 + Math.floor(Math.random() * 2)) % ROW_HEIGHTS.length
+    // Generate cells that sum to exactly 3 cols, using available assets
+    const cells: AssetSize[] = []
+    let colsLeft = 3
+    let assetsLeft = remaining
+
+    while (colsLeft > 0 && assetsLeft > 0) {
+      if (colsLeft === 1 || assetsLeft === 1) {
+        cells.push('normal')
+        colsLeft -= 1
+        assetsLeft -= 1
+      } else if (colsLeft === 2) {
+        // either wide (uses 1 asset, 2 cols) or two normals
+        if (Math.random() < 0.4) {
+          cells.push('wide')
+          colsLeft -= 2
+          assetsLeft -= 1
+        } else {
+          cells.push('normal')
+          colsLeft -= 1
+          assetsLeft -= 1
+        }
+      } else {
+        // colsLeft === 3
+        const r = Math.random()
+        if (r < 0.25 && assetsLeft >= 2) {
+          // wide + normal
+          cells.push('wide')
+          colsLeft -= 2
+          assetsLeft -= 1
+        } else if (r < 0.45 && assetsLeft >= 2) {
+          // normal + wide
+          cells.push('normal')
+          colsLeft -= 1
+          assetsLeft -= 1
+        } else {
+          cells.push('normal')
+          colsLeft -= 1
+          assetsLeft -= 1
+        }
       }
     }
 
-    layout.push({ size, rowHeight: ROW_HEIGHTS[rowHeightIndex] })
+    rows.push({ height, cells })
+    remaining -= cells.length
   }
-  return layout
+
+  return rows
 }
 
 function sortAssets(assets: ImmichAsset[], sort: SortKey, stats: { stats: VoteStats[] } | null): ImmichAsset[] {
@@ -107,7 +124,7 @@ export default function AlbumPage() {
   const [sortKey, setSortKey] = useState<SortKey>('dateDesc')
   const [activeTab, setActiveTab] = useState<Tab>('photos')
   const [showBackToTop, setShowBackToTop] = useState(false)
-  const [layout, setLayout] = useState<{ size: AssetSize; rowHeight: number }[]>([])
+  const [rows, setRows] = useState<RowDef[]>([])
 
   useEffect(() => {
     const onScroll = () => setShowBackToTop(window.scrollY > 400)
@@ -126,7 +143,7 @@ export default function AlbumPage() {
       if (found) setAlbum({ ...found, votingStatus: getVotingStatus(found) })
       if (Array.isArray(assetsData)) {
         setAssets(assetsData)
-        setLayout(generateLayout(assetsData.length))
+        setRows(generateRows(assetsData.length))
       }
       if (voteStatus.voted && voteStatus.vote) {
         setPicks({ 1: voteStatus.vote.rank1_asset_id, 2: voteStatus.vote.rank2_asset_id, 3: voteStatus.vote.rank3_asset_id })
@@ -195,6 +212,16 @@ export default function AlbumPage() {
   const votingStatus = album.votingStatus!
   const isPickable = votingStatus.isOpen && !submitted
   const picksCount = [picks[1], picks[2], picks[3]].filter(Boolean).length
+
+  // Flatten rows into indexed asset+cell pairs
+  let assetIndex = 0
+  const rowsWithAssets = rows.map(row => ({
+    ...row,
+    assets: row.cells.map(size => {
+      const asset = sortedAssets[assetIndex++]
+      return { asset, size }
+    }).filter(x => x.asset),
+  })).filter(r => r.assets.length > 0)
 
   return (
     <div className="grain min-h-screen">
@@ -302,57 +329,58 @@ export default function AlbumPage() {
           )}
         </div>
 
-        {/* Photos Tab */}
+        {/* Photos Tab – row-based grid, no gaps */}
         {activeTab === 'photos' && (
-          <div className="grid grid-cols-3 gap-1">
-            {sortedAssets.map((asset, index) => {
-              const l = layout[index] || { size: 'normal', rowHeight: 260 }
-              const rank = getRankForAsset(asset.id)
-              const assetStats = getStatsForAsset(asset.id)
-              const colSpan = l.size === 'hero' ? 'col-span-3' : l.size === 'wide' ? 'col-span-2' : 'col-span-1'
-
-              return (
-                <div key={asset.id}
-                  className={`relative group overflow-hidden ${colSpan} ${rank ? 'ring-2 ' + RANK_COLORS[rank as PickSlot].ring : ''}`}
-                  style={{ height: `${l.rowHeight}px` }}
-                >
-                  <img
-                    src={`/api/proxy/thumbnail/${asset.id}?size=preview`}
-                    alt={asset.originalFileName}
-                    className="w-full h-full object-cover cursor-zoom-in transition-transform duration-500 group-hover:scale-105"
-                    loading="lazy"
-                    onClick={() => setLightbox(asset.id)}
-                  />
-                  {rank && (
-                    <div className={`absolute top-2 left-2 w-7 h-7 flex items-center justify-center text-xs z-10 ${RANK_COLORS[rank as PickSlot].badge}`}>
-                      {RANK_COLORS[rank as PickSlot].label}
+          <div className="flex flex-col gap-1">
+            {rowsWithAssets.map((row, ri) => (
+              <div key={ri} className="flex gap-1" style={{ height: `${row.height}px` }}>
+                {row.assets.map(({ asset, size }) => {
+                  const rank = getRankForAsset(asset.id)
+                  const assetStats = getStatsForAsset(asset.id)
+                  return (
+                    <div
+                      key={asset.id}
+                      className={`relative group overflow-hidden flex-shrink-0 ${size === 'wide' ? 'flex-[2]' : 'flex-[1]'} ${rank ? 'ring-2 ' + RANK_COLORS[rank as PickSlot].ring : ''}`}
+                    >
+                      <img
+                        src={`/api/proxy/thumbnail/${asset.id}?size=preview`}
+                        alt={asset.originalFileName}
+                        className="w-full h-full object-cover cursor-zoom-in transition-transform duration-500 group-hover:scale-105"
+                        loading="lazy"
+                        onClick={() => setLightbox(asset.id)}
+                      />
+                      {rank && (
+                        <div className={`absolute top-2 left-2 w-7 h-7 flex items-center justify-center text-xs z-10 ${RANK_COLORS[rank as PickSlot].badge}`}>
+                          {RANK_COLORS[rank as PickSlot].label}
+                        </div>
+                      )}
+                      {isPickable && (
+                        <div className="absolute bottom-0 left-0 right-0 flex justify-center gap-1 p-1.5 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                          {([1, 2, 3] as PickSlot[]).map(r => {
+                            const isActive = picks[r] === asset.id
+                            const isTaken = picks[r] !== null && picks[r] !== asset.id
+                            return (
+                              <button key={r} onClick={e => handleRankClick(asset.id, r, e)}
+                                className={`px-2 py-1 text-xs font-bold transition-all ${isActive ? RANK_COLORS[r].btn + ' ring-1 ring-white' : isTaken ? 'bg-white/10 text-white/30 cursor-not-allowed' : RANK_COLORS[r].btn}`}>
+                                {RANK_COLORS[r].label}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                      {(submitted || votingStatus.hasEnded) && assetStats && (
+                        <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1 p-3 pointer-events-none">
+                          {assetStats.rank1_count > 0 && <div className="text-yellow-400 text-sm font-medium">🥇 {assetStats.rank1_count}x</div>}
+                          {assetStats.rank2_count > 0 && <div className="text-gray-300 text-sm font-medium">🥈 {assetStats.rank2_count}x</div>}
+                          {assetStats.rank3_count > 0 && <div className="text-amber-600 text-sm font-medium">🥉 {assetStats.rank3_count}x</div>}
+                          <div className="text-white/60 text-xs mt-1">Score: {assetStats.score}</div>
+                        </div>
+                      )}
                     </div>
-                  )}
-                  {isPickable && (
-                    <div className="absolute bottom-0 left-0 right-0 flex justify-center gap-1 p-1.5 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                      {([1, 2, 3] as PickSlot[]).map(r => {
-                        const isActive = picks[r] === asset.id
-                        const isTaken = picks[r] !== null && picks[r] !== asset.id
-                        return (
-                          <button key={r} onClick={e => handleRankClick(asset.id, r, e)}
-                            className={`px-2 py-1 text-xs font-bold transition-all ${isActive ? RANK_COLORS[r].btn + ' ring-1 ring-white' : isTaken ? 'bg-white/10 text-white/30 cursor-not-allowed' : RANK_COLORS[r].btn}`}>
-                            {RANK_COLORS[r].label}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  )}
-                  {(submitted || votingStatus.hasEnded) && assetStats && (
-                    <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1 p-3 pointer-events-none">
-                      {assetStats.rank1_count > 0 && <div className="text-yellow-400 text-sm font-medium">🥇 {assetStats.rank1_count}x</div>}
-                      {assetStats.rank2_count > 0 && <div className="text-gray-300 text-sm font-medium">🥈 {assetStats.rank2_count}x</div>}
-                      {assetStats.rank3_count > 0 && <div className="text-amber-600 text-sm font-medium">🥉 {assetStats.rank3_count}x</div>}
-                      <div className="text-white/60 text-xs mt-1">Score: {assetStats.score}</div>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
+                  )
+                })}
+              </div>
+            ))}
           </div>
         )}
 
@@ -412,10 +440,16 @@ export default function AlbumPage() {
         </button>
       )}
 
+      {/* Lightbox – click anywhere or on image to close */}
       {lightbox && (
-        <div className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-4" onClick={() => setLightbox(null)}>
-          <button className="absolute top-4 right-4 text-white/60 hover:text-white text-2xl z-10" onClick={() => setLightbox(null)}>x</button>
-          <img src={`/api/proxy/thumbnail/${lightbox}?size=preview`} alt="" className="max-w-full max-h-full object-contain" onClick={e => e.stopPropagation()} />
+        <div className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-4 cursor-zoom-out" onClick={() => setLightbox(null)}>
+          <button className="absolute top-4 right-4 text-white/60 hover:text-white text-2xl z-10" onClick={() => setLightbox(null)}>✕</button>
+          <img
+            src={`/api/proxy/thumbnail/${lightbox}?size=preview`}
+            alt=""
+            className="max-w-full max-h-full object-contain cursor-zoom-out"
+            onClick={() => setLightbox(null)}
+          />
         </div>
       )}
     </div>
