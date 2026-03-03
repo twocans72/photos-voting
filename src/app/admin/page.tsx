@@ -14,6 +14,7 @@ interface AdminAlbum extends Album {
 export default function AdminPage() {
   const router = useRouter()
   const [albums, setAlbums] = useState<AdminAlbum[]>([])
+  const albumsRef = useRef<AdminAlbum[]>([])
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState<string | null>(null)
@@ -27,7 +28,9 @@ export default function AdminPage() {
       })
       .then(data => {
         if (Array.isArray(data)) {
-          setAlbums(data.sort((a: AdminAlbum, b: AdminAlbum) => (a.sort_order ?? 9999) - (b.sort_order ?? 9999)))
+          const sorted = data.sort((a: AdminAlbum, b: AdminAlbum) => (a.sort_order ?? 9999) - (b.sort_order ?? 9999))
+          setAlbums(sorted)
+          albumsRef.current = sorted
         }
       })
       .finally(() => setLoading(false))
@@ -72,12 +75,13 @@ export default function AdminPage() {
       const dragged = arr.splice(dragItem.current!, 1)[0]
       arr.splice(index, 0, dragged)
       dragItem.current = index
+      albumsRef.current = arr
       return arr
     })
   }
 
   const handleDragEnd = async () => {
-    const updates = albums.map((album, index) => ({ id: album.id, sort_order: index }))
+    const updates = albumsRef.current.map((album, index) => ({ id: album.id, sort_order: index }))
     await fetch('/api/admin/albums/reorder', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -103,7 +107,7 @@ export default function AdminPage() {
             {syncing ? 'Synchronisiere...' : 'Alben von Immich synchronisieren'}
           </button>
           {syncResult && <span className="text-green-400 text-sm">{syncResult}</span>}
-          <span className="text-text-muted text-xs ml-4">⠿ Zeilen ziehen zum Sortieren</span>
+          <span className="text-text-muted text-xs ml-4">Zeilen ziehen zum Sortieren</span>
         </div>
 
         {loading ? (

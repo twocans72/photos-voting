@@ -33,7 +33,7 @@ export default function HomePage() {
 
       <main className="px-8 py-12 max-w-7xl mx-auto">
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-1">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[...Array(6)].map((_, i) => <div key={i} className="aspect-[4/3] shimmer" />)}
           </div>
         ) : albums.length === 0 ? (
@@ -43,7 +43,7 @@ export default function HomePage() {
         ) : (
           <>
             <div className="mb-10">
-              <h2 className="font-display text-5xl font-light text-text-primary">{t.albums}</h2>
+              <h2 className="font-display text-5xl font-light text-text-primary">Alben</h2>
               <div className="w-12 h-px bg-accent mt-3" />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-1">

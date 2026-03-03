@@ -34,7 +34,6 @@ db.exec(`
     lottery_enabled INTEGER DEFAULT 0,
     lottery_drawn INTEGER DEFAULT 0,
     lottery_winner_id TEXT,
-	sort_order INTEGER DEFAULT 9999,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
@@ -90,19 +89,6 @@ try {
 } catch(e) {
   console.log('Migration check skipped:', e.message)
 }
-
-
-// Migration: add sort_order column if missing
-try {
-  const cols = db.prepare("SELECT name FROM pragma_table_info('albums')").all().map(c => c.name)
-  if (!cols.includes('sort_order')) {
-    db.exec('ALTER TABLE albums ADD COLUMN sort_order INTEGER DEFAULT 9999')
-    console.log('Added sort_order column to albums')
-  }
-} catch(e) {
-  console.log('sort_order migration skipped:', e.message)
-}
-
 
 console.log('✅ Database migrated:', dbPath)
 db.close()
