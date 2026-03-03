@@ -37,3 +37,10 @@ export function validateAdminSession(token: string): boolean {
 export function generateSessionToken(): string {
   return randomBytes(16).toString('hex')
 }
+
+export function getAdminFromRequest(): boolean {
+  const cookieStore = cookies()
+  const token = cookieStore.get('admin_token')?.value
+  if (!token) return false
+  return validateAdminSession(token)
+}
