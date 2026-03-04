@@ -69,6 +69,25 @@ db.exec(`
   );
 `)
 
+// Migration: add sort_order column if missing
+try {
+  const col = db.prepare("SELECT name FROM pragma_table_info('albums') WHERE name='sort_order'").get()
+  if (!col) {
+    db.exec(`ALTER TABLE albums ADD COLUMN sort_order INTEGER DEFAULT 0`)
+    // Initialize sort_order based on current created_at order
+    db.exec(`
+      WITH ranked AS (
+        SELECT id, ROW_NUMBER() OVER (ORDER BY created_at ASC) - 1 AS rn
+        FROM albums
+      )
+      UPDATE albums SET sort_order = (SELECT rn FROM ranked WHERE ranked.id = albums.id)
+    `)
+    console.log('✅ Migrated albums: added sort_order column')
+  }
+} catch(e) {
+  console.log('Migration sort_order skipped:', e.message)
+}
+
 // Migration: fix expires_at column if it's still TEXT type
 try {
   const col = db.prepare("SELECT type FROM pragma_table_info('admin_sessions') WHERE name='expires_at'").get()
