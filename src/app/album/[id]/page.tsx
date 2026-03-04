@@ -506,4 +506,3 @@ export default function AlbumPage() {
   )
 }
 
-const GAP = 4
