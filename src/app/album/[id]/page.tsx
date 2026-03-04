@@ -10,10 +10,6 @@ import { useLang, LangToggle } from '@/lib/LanguageContext'
 type PickSlot = 1 | 2 | 3
 type SortKey = 'dateDesc' | 'dateAsc' | 'name' | 'random' | 'score'
 type Tab = 'photos' | 'results'
-type AssetSize = 'wide' | 'normal' // wide = col-span-2, normal = col-span-1
-
-const ROW_HEIGHT_NORMAL = 260
-const ROW_HEIGHT_TALL = 325 // 1.25x
 
 interface AlbumWithStatus extends Album {
   votingStatus?: ReturnType<typeof getVotingStatus>
@@ -25,66 +21,62 @@ const RANK_COLORS = {
   3: { ring: 'ring-amber-600', badge: 'bg-amber-600 text-white', btn: 'bg-amber-600 text-white hover:bg-amber-500', label: '🥉' },
 }
 
-// A row is always exactly 3 columns.
-// Each row has a fixed height (normal or tall) chosen randomly.
-// Within a row: generate a mix of wide (2-col) and normal (1-col) cells that sum to exactly 3 cols.
-interface RowDef {
-  height: number
-  cells: AssetSize[] // e.g. ['wide','normal'] or ['normal','normal','normal'] or ['normal','wide']
+const GRID_WIDTH = 1200 // px, matches max-w-7xl approx
+const GAP = 4 // px gap between cells
+
+// A row contains 2 or 3 assets.
+// The "lead" asset determines the row height based on its aspect ratio and assigned width.
+// All assets in a row share the same height.
+interface RowCell { asset: ImmichAsset; flex: number }
+interface Row { cells: RowCell[]; height: number }
+
+function getAspect(asset: ImmichAsset): number {
+  const w = asset.exifInfo?.exifImageWidth || asset.width
+  const h = asset.exifInfo?.exifImageHeight || asset.height
+  if (w && h) return w / h
+  return 4 / 3 // fallback
 }
 
-function generateRows(count: number): RowDef[] {
-  const rows: RowDef[] = []
-  let remaining = count
+function buildRows(assets: ImmichAsset[]): Row[] {
+  const rows: Row[] = []
+  let i = 0
 
-  while (remaining > 0) {
-    const tall = Math.random() < 0.3 // 30% chance of tall row
-    const height = tall ? ROW_HEIGHT_TALL : ROW_HEIGHT_NORMAL
+  while (i < assets.length) {
+    const remaining = assets.length - i
+    const r = Math.random()
 
-    // Generate cells that sum to exactly 3 cols, using available assets
-    const cells: AssetSize[] = []
-    let colsLeft = 3
-    let assetsLeft = remaining
+    // Decide row pattern
+    let pattern: ('wide' | 'normal')[]
 
-    while (colsLeft > 0 && assetsLeft > 0) {
-      if (colsLeft === 1 || assetsLeft === 1) {
-        cells.push('normal')
-        colsLeft -= 1
-        assetsLeft -= 1
-      } else if (colsLeft === 2) {
-        // either wide (uses 1 asset, 2 cols) or two normals
-        if (Math.random() < 0.4) {
-          cells.push('wide')
-          colsLeft -= 2
-          assetsLeft -= 1
-        } else {
-          cells.push('normal')
-          colsLeft -= 1
-          assetsLeft -= 1
-        }
-      } else {
-        // colsLeft === 3
-        const r = Math.random()
-        if (r < 0.25 && assetsLeft >= 2) {
-          // wide + normal
-          cells.push('wide')
-          colsLeft -= 2
-          assetsLeft -= 1
-        } else if (r < 0.45 && assetsLeft >= 2) {
-          // normal + wide
-          cells.push('normal')
-          colsLeft -= 1
-          assetsLeft -= 1
-        } else {
-          cells.push('normal')
-          colsLeft -= 1
-          assetsLeft -= 1
-        }
-      }
+    if (remaining === 1) {
+      pattern = ['wide'] // last single image gets 2/3 width
+    } else if (remaining === 2) {
+      pattern = ['normal', 'normal']
+    } else {
+      // 3 or more remaining
+      if (r < 0.15) pattern = ['wide', 'normal']       // 2/3 + 1/3
+      else if (r < 0.30) pattern = ['normal', 'wide']  // 1/3 + 2/3
+      else pattern = ['normal', 'normal', 'normal']     // 3 equal
     }
 
-    rows.push({ height, cells })
-    remaining -= cells.length
+    const cells: RowCell[] = pattern.map((p, idx) => ({
+      asset: assets[i + idx],
+      flex: p === 'wide' ? 2 : 1,
+    }))
+
+    // Lead cell is the widest one; use its aspect ratio to compute row height
+    const leadCell = cells.reduce((a, b) => a.flex >= b.flex ? a : b)
+    const leadAspect = getAspect(leadCell.asset)
+    const totalFlex = cells.reduce((sum, c) => sum + c.flex, 0)
+    const gapTotal = (cells.length - 1) * GAP
+    const leadWidth = (GRID_WIDTH - gapTotal) * (leadCell.flex / totalFlex)
+    const rowHeight = Math.round(leadWidth / leadAspect)
+
+    // Clamp height between 200 and 500px
+    const clampedHeight = Math.min(500, Math.max(200, rowHeight))
+
+    rows.push({ cells, height: clampedHeight })
+    i += pattern.length
   }
 
   return rows
@@ -124,7 +116,7 @@ export default function AlbumPage() {
   const [sortKey, setSortKey] = useState<SortKey>('dateDesc')
   const [activeTab, setActiveTab] = useState<Tab>('photos')
   const [showBackToTop, setShowBackToTop] = useState(false)
-  const [rows, setRows] = useState<RowDef[]>([])
+  const [rows, setRows] = useState<Row[]>([])
 
   useEffect(() => {
     const onScroll = () => setShowBackToTop(window.scrollY > 400)
@@ -143,7 +135,7 @@ export default function AlbumPage() {
       if (found) setAlbum({ ...found, votingStatus: getVotingStatus(found) })
       if (Array.isArray(assetsData)) {
         setAssets(assetsData)
-        setRows(generateRows(assetsData.length))
+        setRows(buildRows(assetsData))
       }
       if (voteStatus.voted && voteStatus.vote) {
         setPicks({ 1: voteStatus.vote.rank1_asset_id, 2: voteStatus.vote.rank2_asset_id, 3: voteStatus.vote.rank3_asset_id })
@@ -198,6 +190,13 @@ export default function AlbumPage() {
 
   const showResultsTab = submitted || (album?.votingStatus?.hasEnded ?? false)
   const sortedAssets = sortAssets(assets, sortKey, stats)
+
+  // Rebuild rows when sort changes, keeping same random seed per asset order
+  const [sortedRows, setSortedRows] = useState<Row[]>([])
+  useEffect(() => {
+    if (sortedAssets.length > 0) setSortedRows(buildRows(sortedAssets))
+  }, [sortKey, assets])
+
   const availableSorts: { key: SortKey; label: string }[] = [
     { key: 'dateDesc', label: t.sortDateDesc },
     { key: 'dateAsc', label: t.sortDateAsc },
@@ -212,16 +211,7 @@ export default function AlbumPage() {
   const votingStatus = album.votingStatus!
   const isPickable = votingStatus.isOpen && !submitted
   const picksCount = [picks[1], picks[2], picks[3]].filter(Boolean).length
-
-  // Flatten rows into indexed asset+cell pairs
-  let assetIndex = 0
-  const rowsWithAssets = rows.map(row => ({
-    ...row,
-    assets: row.cells.map(size => {
-      const asset = sortedAssets[assetIndex++]
-      return { asset, size }
-    }).filter(x => x.asset),
-  })).filter(r => r.assets.length > 0)
+  const displayRows = sortedRows.length > 0 ? sortedRows : rows
 
   return (
     <div className="grain min-h-screen">
@@ -329,18 +319,19 @@ export default function AlbumPage() {
           )}
         </div>
 
-        {/* Photos Tab – row-based grid, no gaps */}
+        {/* Photos Tab */}
         {activeTab === 'photos' && (
-          <div className="flex flex-col gap-1">
-            {rowsWithAssets.map((row, ri) => (
-              <div key={ri} className="flex gap-1" style={{ height: `${row.height}px` }}>
-                {row.assets.map(({ asset, size }) => {
+          <div className="flex flex-col" style={{ gap: `${GAP}px` }}>
+            {displayRows.map((row, ri) => (
+              <div key={ri} className="flex" style={{ height: `${row.height}px`, gap: `${GAP}px` }}>
+                {row.cells.map(({ asset, flex }) => {
                   const rank = getRankForAsset(asset.id)
                   const assetStats = getStatsForAsset(asset.id)
                   return (
                     <div
                       key={asset.id}
-                      className={`relative group overflow-hidden flex-shrink-0 ${size === 'wide' ? 'flex-[2]' : 'flex-[1]'} ${rank ? 'ring-2 ' + RANK_COLORS[rank as PickSlot].ring : ''}`}
+                      className={`relative group overflow-hidden ${rank ? 'ring-2 ' + RANK_COLORS[rank as PickSlot].ring : ''}`}
+                      style={{ flex }}
                     >
                       <img
                         src={`/api/proxy/thumbnail/${asset.id}?size=preview`}
@@ -440,7 +431,6 @@ export default function AlbumPage() {
         </button>
       )}
 
-      {/* Lightbox – click anywhere or on image to close */}
       {lightbox && (
         <div className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-4 cursor-zoom-out" onClick={() => setLightbox(null)}>
           <button className="absolute top-4 right-4 text-white/60 hover:text-white text-2xl z-10" onClick={() => setLightbox(null)}>✕</button>
@@ -455,3 +445,5 @@ export default function AlbumPage() {
     </div>
   )
 }
+
+const GAP = 4
