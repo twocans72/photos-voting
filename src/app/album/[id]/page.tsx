@@ -382,39 +382,99 @@ export default function AlbumPage() {
               <p className="text-text-muted text-center py-16">{t.noResults}</p>
             ) : (
               <>
-                <p className="text-text-muted text-sm mb-6">{t.totalVotes(stats.totalVotes)}</p>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-10">
+                <p className="text-text-muted text-sm mb-8">{t.totalVotes(stats.totalVotes)}</p>
+
+                {/* Top 3 – hero layout, full width each */}
+                <div className="flex flex-col gap-1 mb-10">
                   {stats.stats.slice(0, 3).map((s, i) => (
-                    <div key={s.asset_id} className="card p-4">
-                      <div className="flex items-center gap-2 mb-3">
-                        <span className="text-xl">{['🥇','🥈','🥉'][i]}</span>
-                        <span className="font-display text-base text-text-primary">{t.place(i + 1)}</span>
-                        <span className="text-text-muted text-xs ml-auto">Score: {s.score}</span>
+                    <div key={s.asset_id} className="flex gap-0" style={{ height: '420px' }}>
+                      {/* Image */}
+                      <div className="relative group flex-1 overflow-hidden cursor-zoom-in" onClick={() => setLightbox(s.asset_id)}>
+                        <img
+                          src={`/api/proxy/thumbnail/${s.asset_id}?size=preview`}
+                          alt=""
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        />
+                        <div className="absolute top-3 left-3 text-3xl">{['🥇','🥈','🥉'][i]}</div>
                       </div>
-                      <img src={`/api/proxy/thumbnail/${s.asset_id}?size=preview`} alt="" className="w-full h-auto mb-3 cursor-zoom-in" onClick={() => setLightbox(s.asset_id)} />
-                      <div className="text-xs text-text-secondary space-y-0.5">
-                        {s.rank1_count > 0 && <div>🥇 {s.rank1_count}{t.onPlace(1)}</div>}
-                        {s.rank2_count > 0 && <div>🥈 {s.rank2_count}{t.onPlace(2)}</div>}
-                        {s.rank3_count > 0 && <div>🥉 {s.rank3_count}{t.onPlace(3)}</div>}
+                      {/* Stats sidebar */}
+                      <div className="w-48 flex-shrink-0 bg-surface-1 border-l border-surface-3 flex flex-col justify-center px-5 py-6 gap-3">
+                        <div>
+                          <p className="font-display text-2xl text-accent">{t.place(i + 1)}</p>
+                          <p className="text-text-muted text-xs mt-0.5">Score: {s.score}</p>
+                        </div>
+                        <div className="border-t border-surface-3 pt-3 space-y-2 text-sm">
+                          {s.rank1_count > 0 && (
+                            <div className="flex items-center justify-between">
+                              <span>🥇 Platz 1</span>
+                              <span className="text-text-secondary font-medium">{s.rank1_count}×</span>
+                            </div>
+                          )}
+                          {s.rank2_count > 0 && (
+                            <div className="flex items-center justify-between">
+                              <span>🥈 Platz 2</span>
+                              <span className="text-text-secondary font-medium">{s.rank2_count}×</span>
+                            </div>
+                          )}
+                          {s.rank3_count > 0 && (
+                            <div className="flex items-center justify-between">
+                              <span>🥉 Platz 3</span>
+                              <span className="text-text-secondary font-medium">{s.rank3_count}×</span>
+                            </div>
+                          )}
+                          <div className="flex items-center justify-between border-t border-surface-3 pt-2 text-text-muted text-xs">
+                            <span>Total Votes</span>
+                            <span>{s.rank1_count + s.rank2_count + s.rank3_count}</span>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   ))}
                 </div>
+
+                {/* Platz 4+ – 3-Spalten Grid */}
                 {stats.stats.length > 3 && (
                   <>
-                    <h3 className="font-display text-xl font-light mb-4 text-text-secondary">Alle bewerteten Fotos</h3>
-                    <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-7 gap-1">
-                      {stats.stats.map((s, i) => (
-                        <div key={s.asset_id} className="relative group cursor-zoom-in" onClick={() => setLightbox(s.asset_id)}>
-                          <img src={`/api/proxy/thumbnail/${s.asset_id}?size=thumbnail`} alt="" className="w-full h-auto" />
-                          <div className="absolute top-1 left-1 text-xs bg-black/70 text-white px-1 py-0.5">
-                            {i < 3 ? ['🥇','🥈','🥉'][i] : `#${i+1}`}
+                    <h3 className="font-display text-xl font-light mb-4 text-text-secondary">Weitere bewertete Fotos</h3>
+                    <div className="flex flex-col gap-1">
+                      {(() => {
+                        const rest = stats.stats.slice(3)
+                        const restRows: { asset: VoteStats; flex: number }[][] = []
+                        for (let ri = 0; ri < rest.length; ri += 3) {
+                          restRows.push(rest.slice(ri, ri + 3).map(s => ({ asset: s, flex: 1 })))
+                        }
+                        return restRows.map((row, ri) => (
+                          <div key={ri} className="flex gap-1" style={{ height: '280px' }}>
+                            {row.map(({ asset: s }, ci) => {
+                              const rank = stats.stats.findIndex(x => x.asset_id === s.asset_id) + 1
+                              return (
+                                <div key={s.asset_id} className="relative group flex-1 overflow-hidden cursor-zoom-in" onClick={() => setLightbox(s.asset_id)}>
+                                  <img
+                                    src={`/api/proxy/thumbnail/${s.asset_id}?size=preview`}
+                                    alt=""
+                                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                                  />
+                                  {/* Rank badge */}
+                                  <div className="absolute top-2 left-2 bg-black/70 text-white text-xs px-1.5 py-0.5">
+                                    #{rank}
+                                  </div>
+                                  {/* Hover stats */}
+                                  <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1 p-3 pointer-events-none">
+                                    {s.rank1_count > 0 && <div className="text-yellow-400 text-sm">🥇 {s.rank1_count}×</div>}
+                                    {s.rank2_count > 0 && <div className="text-gray-300 text-sm">🥈 {s.rank2_count}×</div>}
+                                    {s.rank3_count > 0 && <div className="text-amber-600 text-sm">🥉 {s.rank3_count}×</div>}
+                                    <div className="text-white/60 text-xs mt-1">Score: {s.score}</div>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                            {/* Fill empty cells in last row */}
+                            {row.length < 3 && Array.from({ length: 3 - row.length }).map((_, ei) => (
+                              <div key={`empty-${ei}`} className="flex-1 bg-surface-1" />
+                            ))}
                           </div>
-                          <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs">
-                            Score: {s.score}
-                          </div>
-                        </div>
-                      ))}
+                        ))
+                      })()}
                     </div>
                   </>
                 )}
@@ -445,3 +505,5 @@ export default function AlbumPage() {
     </div>
   )
 }
+
+const GAP = 4
