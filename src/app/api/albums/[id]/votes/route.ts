@@ -21,9 +21,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   if (!sessionToken) sessionToken = generateSessionToken()
   const ip = request.headers.get('x-forwarded-for') || 'unknown'
   const ipHash = hashIp(ip)
-  const existing = db.prepare('SELECT id FROM votes WHERE album_id = ? AND session_token = ?').get(params.id, sessionToken)
-  if (existing) return NextResponse.json({ error: 'Already voted' }, { status: 409 })
-  const result = db.prepare(`INSERT INTO votes (album_id, session_token, rank1_asset_id, rank2_asset_id, rank3_asset_id, email, name, ip_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(params.id, sessionToken, rank1, rank2 || null, rank3 || null, email || null, name || null, ipHash)
+  const existing = db.prepare('SELECT id FROM votes WHERE album_id = ? AND session_token = ?').get(params.id, sessionToken) as { id: number } | undefined
+  let result: { lastInsertRowid: number | bigint }
+  if (existing) {
+    db.prepare(`UPDATE votes SET rank1_asset_id = ?, rank2_asset_id = ?, rank3_asset_id = ?, ip_hash = ? WHERE id = ?`).run(rank1, rank2 || null, rank3 || null, ipHash, existing.id)
+    result = { lastInsertRowid: existing.id }
+  } else {
+    result = db.prepare(`INSERT INTO votes (album_id, session_token, rank1_asset_id, rank2_asset_id, rank3_asset_id, email, name, ip_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(params.id, sessionToken, rank1, rank2 || null, rank3 || null, email || null, name || null, ipHash)
+  }
   if (email && album.lottery_enabled && !album.lottery_drawn) {
     db.prepare(`INSERT OR IGNORE INTO lottery_participants (album_id, vote_id, email, name) VALUES (?, ?, ?, ?)`).run(params.id, result.lastInsertRowid, email, name || null)
   }

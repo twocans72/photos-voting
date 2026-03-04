@@ -281,9 +281,16 @@ export default function AlbumPage() {
         )}
 
         {submitted && (
-          <div className="mb-6 p-4 border border-green-800/40 bg-green-900/10">
-            <p className="font-display text-lg text-green-400">{t.thankYou}</p>
-            <p className="text-text-secondary text-sm mt-0.5">{t.thankYouDesc}</p>
+          <div className="mb-6 p-4 border border-green-800/40 bg-green-900/10 flex items-start justify-between gap-4">
+            <div>
+              <p className="font-display text-lg text-green-400">{t.thankYou}</p>
+              <p className="text-text-secondary text-sm mt-0.5">{t.thankYouDesc}</p>
+            </div>
+            {votingStatus.isOpen && (
+              <button onClick={() => { setSubmitted(false); setActiveTab('photos') }} className="btn-secondary text-sm py-1.5 whitespace-nowrap shrink-0">
+                {t.changeVote}
+              </button>
+            )}
           </div>
         )}
 
