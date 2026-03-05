@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { Album, getVotingStatus, VoteStats } from '@/types'
 import type { ImmichAsset } from '@/lib/immich'
 import { useLang, LangToggle } from '@/lib/LanguageContext'
+import { Logo } from '@/components/Logo'
 
 type PickSlot = 1 | 2 | 3
 type SortKey = 'dateDesc' | 'dateAsc' | 'name' | 'random' | 'score'
@@ -226,18 +227,8 @@ export default function AlbumPage() {
       <header className="border-b border-surface-3 px-4 sm:px-8 py-4 flex items-center gap-4 sm:gap-6">
         <Link href="/" className="text-text-muted hover:text-accent transition-colors text-sm shrink-0">{t.back}</Link>
         <div className="h-4 w-px bg-surface-3 shrink-0" />
-        <Link href="/" style={{ display: 'inline-flex', flexDirection: 'column', textDecoration: 'none', lineHeight: 1, flexShrink: 0 }}>
-          <span style={{
-            fontFamily: "'Raleway', sans-serif", fontSize: '24px', fontWeight: 200,
-            background: 'linear-gradient(90deg,#6A4A18,#B8841C,#F0D060,#B8841C,#6A4A18)',
-            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', display: 'block'
-          }}>Peduzzi</span>
-          <span style={{
-            fontFamily: "'Raleway', sans-serif", fontSize: '24px', fontWeight: 200,
-            background: 'linear-gradient(90deg,#6A4A18,#B8841C,#F0D060,#B8841C,#6A4A18)',
-            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', display: 'block', alignSelf: 'flex-end'
-          }}>Photo</span>
-          <div style={{ height: '0.5px', background: '#C8941C', opacity: 0.35 }} />
+        <Link href="/" style={{ textDecoration: 'none', flexShrink: 0 }}>
+          <Logo size="small" />
         </Link>
         <div className="flex-1 min-w-0">
           <h1 className="font-display text-xl sm:text-2xl font-light text-text-primary truncate">{album.title}</h1>
