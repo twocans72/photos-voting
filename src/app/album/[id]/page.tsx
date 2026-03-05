@@ -226,22 +226,18 @@ export default function AlbumPage() {
       <header className="border-b border-surface-3 px-4 sm:px-8 py-4 flex items-center gap-4 sm:gap-6">
         <Link href="/" className="text-text-muted hover:text-accent transition-colors text-sm shrink-0">{t.back}</Link>
         <div className="h-4 w-px bg-surface-3 shrink-0" />
-        <Link href="/" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', textDecoration: 'none', lineHeight: 1, whiteSpace: 'nowrap', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'baseline' }}>
-            <span style={{
-              fontFamily: "'Raleway', sans-serif", fontSize: '28px', fontWeight: 200,
-              background: 'linear-gradient(90deg,#6A4A18,#B8841C,#F0D060,#B8841C,#6A4A18)',
-              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-              display: 'inline-block', transform: 'scaleX(-1)'
-            }}>Peduzzi</span>
-            <span style={{
-              fontFamily: "'Raleway', sans-serif", fontSize: '28px', fontWeight: 200,
-              background: 'linear-gradient(90deg,#6A4A18,#B8841C,#F0D060,#B8841C,#6A4A18)',
-              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-              display: 'inline-block', marginLeft: '-7px'
-            }}>Photo</span>
-          </div>
-          <div style={{ height: '0.5px', background: '#C8941C', opacity: 0.35, width: '100%' }} />
+        <Link href="/" style={{ display: 'inline-flex', flexDirection: 'column', textDecoration: 'none', lineHeight: 1, flexShrink: 0 }}>
+          <span style={{
+            fontFamily: "'Raleway', sans-serif", fontSize: '24px', fontWeight: 200,
+            background: 'linear-gradient(90deg,#6A4A18,#B8841C,#F0D060,#B8841C,#6A4A18)',
+            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', display: 'block'
+          }}>Peduzzi</span>
+          <span style={{
+            fontFamily: "'Raleway', sans-serif", fontSize: '24px', fontWeight: 200,
+            background: 'linear-gradient(90deg,#6A4A18,#B8841C,#F0D060,#B8841C,#6A4A18)',
+            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', display: 'block', alignSelf: 'flex-end'
+          }}>Photo</span>
+          <div style={{ height: '0.5px', background: '#C8941C', opacity: 0.35 }} />
         </Link>
         <div className="flex-1 min-w-0">
           <h1 className="font-display text-xl sm:text-2xl font-light text-text-primary truncate">{album.title}</h1>
@@ -374,7 +370,7 @@ export default function AlbumPage() {
                         </div>
                       )}
                       {isPickable && (
-                        <div className="absolute bottom-0 left-0 right-0 flex justify-center gap-1 p-1.5 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                        <div className="absolute bottom-0 left-0 right-0 flex justify-center gap-1 p-1.5 bg-black/60 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity z-10">
                           {([1, 2, 3] as PickSlot[]).map(r => {
                             const isActive = picks[r] === asset.id
                             const isTaken = picks[r] !== null && picks[r] !== asset.id

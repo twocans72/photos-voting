@@ -24,22 +24,18 @@ export default function HomePage() {
   return (
     <div className="grain min-h-screen">
       <header className="border-b border-surface-3 px-8 py-6 flex items-center justify-between">
-        <div className="flex flex-col items-start">
-          <div style={{ display: 'flex', alignItems: 'baseline', lineHeight: 1, whiteSpace: 'nowrap' }}>
-            <span style={{
-              fontFamily: "'Raleway', sans-serif", fontSize: '36px', fontWeight: 200,
-              background: 'linear-gradient(90deg,#6A4A18,#B8841C,#F0D060,#B8841C,#6A4A18)',
-              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-              display: 'inline-block', transform: 'scaleX(-1)'
-            }}>Peduzzi</span>
-            <span style={{
-              fontFamily: "'Raleway', sans-serif", fontSize: '36px', fontWeight: 200,
-              background: 'linear-gradient(90deg,#6A4A18,#B8841C,#F0D060,#B8841C,#6A4A18)',
-              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-              display: 'inline-block', marginLeft: '-9px'
-            }}>Photo</span>
-          </div>
-          <div style={{ height: '0.5px', background: '#C8941C', opacity: 0.35, width: '100%', margin: '2px 0' }} />
+        <div style={{ display: 'inline-flex', flexDirection: 'column', lineHeight: 1 }}>
+          <span style={{
+            fontFamily: "'Raleway', sans-serif", fontSize: '36px', fontWeight: 200,
+            background: 'linear-gradient(90deg,#6A4A18,#B8841C,#F0D060,#B8841C,#6A4A18)',
+            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', display: 'block'
+          }}>Peduzzi</span>
+          <span style={{
+            fontFamily: "'Raleway', sans-serif", fontSize: '36px', fontWeight: 200,
+            background: 'linear-gradient(90deg,#6A4A18,#B8841C,#F0D060,#B8841C,#6A4A18)',
+            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', display: 'block', alignSelf: 'flex-end'
+          }}>Photo</span>
+          <div style={{ height: '0.5px', background: '#C8941C', opacity: 0.35, margin: '2px 0' }} />
           <span style={{ fontFamily: "'Raleway', sans-serif", fontSize: '9px', fontWeight: 300, letterSpacing: '6px', color: '#C8941C', opacity: 0.6 }}>photography</span>
         </div>
         <LangToggle />
