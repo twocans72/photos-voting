@@ -117,6 +117,14 @@ export default function AlbumPage() {
   const [activeTab, setActiveTab] = useState<Tab>('photos')
   const [showBackToTop, setShowBackToTop] = useState(false)
   const [rows, setRows] = useState<Row[]>([])
+  const [windowWidth, setWindowWidth] = useState(1200)
+
+  useEffect(() => {
+    const update = () => setWindowWidth(window.innerWidth)
+    update()
+    window.addEventListener('resize', update)
+    return () => window.removeEventListener('resize', update)
+  }, [])
 
   useEffect(() => {
     const onScroll = () => setShowBackToTop(window.scrollY > 400)
@@ -215,17 +223,34 @@ export default function AlbumPage() {
 
   return (
     <div className="grain min-h-screen">
-      <header className="border-b border-surface-3 px-8 py-5 flex items-center gap-6">
-        <Link href="/" className="text-text-muted hover:text-accent transition-colors text-sm">{t.back}</Link>
-        <div className="h-4 w-px bg-surface-3" />
-        <div className="flex-1">
-          <h1 className="font-display text-2xl font-light text-text-primary">{album.title}</h1>
-          {album.description && <p className="text-text-muted text-xs mt-0.5">{album.description}</p>}
+      <header className="border-b border-surface-3 px-4 sm:px-8 py-4 flex items-center gap-4 sm:gap-6">
+        <Link href="/" className="text-text-muted hover:text-accent transition-colors text-sm shrink-0">{t.back}</Link>
+        <div className="h-4 w-px bg-surface-3 shrink-0" />
+        <Link href="/" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', textDecoration: 'none', lineHeight: 1, whiteSpace: 'nowrap', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline' }}>
+            <span style={{
+              fontFamily: "'Raleway', sans-serif", fontSize: '28px', fontWeight: 200,
+              background: 'linear-gradient(90deg,#6A4A18,#B8841C,#F0D060,#B8841C,#6A4A18)',
+              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+              display: 'inline-block', transform: 'scaleX(-1)'
+            }}>Peduzzi</span>
+            <span style={{
+              fontFamily: "'Raleway', sans-serif", fontSize: '28px', fontWeight: 200,
+              background: 'linear-gradient(90deg,#6A4A18,#B8841C,#F0D060,#B8841C,#6A4A18)',
+              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+              display: 'inline-block', marginLeft: '-7px'
+            }}>Photo</span>
+          </div>
+          <div style={{ height: '0.5px', background: '#C8941C', opacity: 0.35, width: '100%' }} />
+        </Link>
+        <div className="flex-1 min-w-0">
+          <h1 className="font-display text-xl sm:text-2xl font-light text-text-primary truncate">{album.title}</h1>
+          {album.description && <p className="text-text-muted text-xs mt-0.5 truncate">{album.description}</p>}
         </div>
         <LangToggle />
       </header>
 
-      <div className="max-w-7xl mx-auto px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-8 py-4 sm:py-8">
 
         {votingStatus.isOpen && !submitted && (
           <div className="mb-6 p-5 border border-accent/30 bg-accent/5">
@@ -281,16 +306,9 @@ export default function AlbumPage() {
         )}
 
         {submitted && (
-          <div className="mb-6 p-4 border border-green-800/40 bg-green-900/10 flex items-start justify-between gap-4">
-            <div>
-              <p className="font-display text-lg text-green-400">{t.thankYou}</p>
-              <p className="text-text-secondary text-sm mt-0.5">{t.thankYouDesc}</p>
-            </div>
-            {votingStatus.isOpen && (
-              <button onClick={() => { setSubmitted(false); setActiveTab('photos') }} className="btn-secondary text-sm py-1.5 whitespace-nowrap shrink-0">
-                {t.changeVote}
-              </button>
-            )}
+          <div className="mb-6 p-4 border border-green-800/40 bg-green-900/10">
+            <p className="font-display text-lg text-green-400">{t.thankYou}</p>
+            <p className="text-text-secondary text-sm mt-0.5">{t.thankYouDesc}</p>
           </div>
         )}
 
@@ -328,9 +346,12 @@ export default function AlbumPage() {
 
         {/* Photos Tab */}
         {activeTab === 'photos' && (
-          <div className="flex flex-col" style={{ gap: `${GAP}px` }}>
-            {displayRows.map((row, ri) => (
-              <div key={ri} className="flex" style={{ height: `${row.height}px`, gap: `${GAP}px` }}>
+          <div className="flex flex-col" style={{ gap: `${GAP}px`, touchAction: 'pan-y pinch-zoom' }}>
+            {displayRows.map((row, ri) => {
+              const scale = Math.min(1, (windowWidth - 64) / GRID_WIDTH)
+              const rowH = Math.max(100, Math.round(row.height * scale))
+              return (
+              <div key={ri} className="flex" style={{ height: `${rowH}px`, gap: `${GAP}px` }}>
                 {row.cells.map(({ asset, flex }) => {
                   const rank = getRankForAsset(asset.id)
                   const assetStats = getStatsForAsset(asset.id)
@@ -378,7 +399,7 @@ export default function AlbumPage() {
                   )
                 })}
               </div>
-            ))}
+            )})}
           </div>
         )}
 
@@ -512,4 +533,5 @@ export default function AlbumPage() {
     </div>
   )
 }
+
 
