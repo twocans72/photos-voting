@@ -5,7 +5,7 @@ interface LogoProps {
 }
 
 export function Logo({ size = 'large' }: LogoProps) {
-  const px = size === 'large' ? 192 : 112
+  const px = size === 'large' ? 160 : 96
 
   return (
     <Image
