@@ -108,6 +108,7 @@ export default function AlbumPage() {
   const [picks, setPicks] = useState<Record<PickSlot, string | null>>({ 1: null, 2: null, 3: null })
   const [stats, setStats] = useState<{ totalVotes: number; stats: VoteStats[] } | null>(null)
   const [loading, setLoading] = useState(true)
+  const [assetsError, setAssetsError] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [showLotteryForm, setShowLotteryForm] = useState(false)
   const [email, setEmail] = useState('')
@@ -136,7 +137,7 @@ export default function AlbumPage() {
   useEffect(() => {
     Promise.all([
       fetch(`/api/albums`).then(r => r.json()),
-      fetch(`/api/albums/${albumId}/assets`).then(r => r.json()),
+      fetch(`/api/albums/${albumId}/assets`).then(r => r.ok ? r.json() : null).catch(() => null),
       fetch(`/api/albums/${albumId}/votes`).then(r => r.json()),
       fetch(`/api/albums/${albumId}/stats`).then(r => r.json()),
     ]).then(([albums, assetsData, voteStatus, statsData]) => {
@@ -145,6 +146,8 @@ export default function AlbumPage() {
       if (Array.isArray(assetsData)) {
         setAssets(assetsData)
         setRows(buildRows(assetsData))
+      } else {
+        setAssetsError(true)
       }
       if (voteStatus.voted && voteStatus.vote) {
         setPicks({ 1: voteStatus.vote.rank1_asset_id, 2: voteStatus.vote.rank2_asset_id, 3: voteStatus.vote.rank3_asset_id })
@@ -330,6 +333,12 @@ export default function AlbumPage() {
             </div>
           )}
         </div>
+
+        {assetsError && (
+          <div className="mb-6 p-4 border border-red-800/40 bg-red-900/10">
+            <p className="text-red-400 text-sm">{t.assetsLoadError}</p>
+          </div>
+        )}
 
         {/* Photos Tab */}
         {activeTab === 'photos' && (
