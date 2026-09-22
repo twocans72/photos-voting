@@ -6,6 +6,9 @@ services:
 
     container_name: photos-voting
     restart: unless-stopped
+    labels:
+      # Watchtower (deploy/watchtower-compose.yml) zieht nur Container mit diesem Label.
+      - com.centurylinklabs.watchtower.enable=true
     ports:
       - "3100:3000"   # Port 3100 auf der Synology, intern 3000
     volumes:
