@@ -1,0 +1,30 @@
+# Die fehlende Hälfte des Deploys: GitHub Actions baut bei jedem Push auf `main`
+# das Image nach ghcr.io (.github/workflows/docker.yml), aber auf der NAS zieht
+# es niemand. Watchtower pollt die Registry und startet den Container mit dem
+# neuen Image neu.
+#
+# WICHTIG — `--label-enable`: ohne diese Flagge würde Watchtower ALLES auf der
+# NAS aktualisieren, also auch Immich, Postgres und andere Stacks. Mit ihr fasst
+# es nur Container an, die das Label com.centurylinklabs.watchtower.enable=true
+# tragen (siehe docker-compose.yml).
+#
+# Das Image ghcr.io/twocans72/photos-voting ist öffentlich, es braucht kein Login.
+#
+# Start auf der NAS (einmalig):
+#   cd /volume1/docker/photos-voting/deploy   # oder wo dieses Repo liegt
+#   sudo docker compose -f watchtower-compose.yml up -d
+#   (oder als Projekt im Container Manager anlegen — dieselbe Datei)
+#
+# Danach den photos-voting-Container einmal mit dem Label neu erzeugen:
+#   cd .. && sudo docker compose up -d
+#
+# Manuell sofort nachziehen, ohne Watchtower:
+#   sudo docker compose pull && sudo docker compose up -d
+services:
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower
+    restart: unless-stopped
+    command: --label-enable --cleanup --interval 300
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
