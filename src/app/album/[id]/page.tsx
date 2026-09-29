@@ -217,6 +217,45 @@ export default function AlbumPage() {
     ...(showResultsTab ? [{ key: 'score' as SortKey, label: t.sortScore }] : []),
   ]
 
+  // Lightbox navigation order follows what is currently visible
+  const lightboxIds: string[] = activeTab === 'results' && stats
+    ? stats.stats.map(s => s.asset_id)
+    : (sortedRows.length > 0 ? sortedRows : rows).flatMap(r => r.cells.map(c => c.asset.id))
+
+  const navigateLightbox = useCallback((dir: 1 | -1) => {
+    setLightbox(cur => {
+      if (!cur) return cur
+      const idx = lightboxIds.indexOf(cur)
+      if (idx === -1 || lightboxIds.length === 0) return cur
+      return lightboxIds[(idx + dir + lightboxIds.length) % lightboxIds.length]
+    })
+  }, [lightboxIds.join(',')]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!lightbox) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight') navigateLightbox(1)
+      else if (e.key === 'ArrowLeft') navigateLightbox(-1)
+      else if (e.key === 'Escape') setLightbox(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [lightbox, navigateLightbox])
+
+  const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null)
+  const onLightboxTouchStart = (e: React.TouchEvent) => {
+    const t0 = e.touches[0]
+    setTouchStart({ x: t0.clientX, y: t0.clientY })
+  }
+  const onLightboxTouchEnd = (e: React.TouchEvent) => {
+    if (!touchStart) return
+    const t0 = e.changedTouches[0]
+    const dx = t0.clientX - touchStart.x
+    const dy = t0.clientY - touchStart.y
+    setTouchStart(null)
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) navigateLightbox(dx < 0 ? 1 : -1)
+  }
+
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="text-text-muted font-display text-2xl animate-pulse">{t.loading}</div></div>
   if (!album) return <div className="min-h-screen flex items-center justify-center"><div className="text-text-muted">{t.albumNotFound}</div></div>
 
@@ -517,9 +556,19 @@ export default function AlbumPage() {
       )}
 
       {lightbox && (
-        <div className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-4 cursor-zoom-out" onClick={() => setLightbox(null)}>
+        <div className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-4 cursor-zoom-out" style={{ touchAction: 'pan-y' }}
+          onClick={() => setLightbox(null)} onTouchStart={onLightboxTouchStart} onTouchEnd={onLightboxTouchEnd}>
           <button className="absolute top-4 right-4 text-white/60 hover:text-white text-2xl z-10" onClick={() => setLightbox(null)}>✕</button>
+          {lightboxIds.length > 1 && (
+            <>
+              <button aria-label="Previous" className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 text-white/60 hover:text-white text-4xl px-3 py-4 z-10"
+                onClick={e => { e.stopPropagation(); navigateLightbox(-1) }}>‹</button>
+              <button aria-label="Next" className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 text-white/60 hover:text-white text-4xl px-3 py-4 z-10"
+                onClick={e => { e.stopPropagation(); navigateLightbox(1) }}>›</button>
+            </>
+          )}
           <img
+            key={lightbox}
             src={`/api/proxy/thumbnail/${lightbox}?size=preview`}
             alt=""
             className="max-w-full max-h-full object-contain cursor-zoom-out"
