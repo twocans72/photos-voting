@@ -33,7 +33,7 @@ export default function HomePage() {
     <>
       <SiteHeader />
       <main>
-        <h1 className="display" style={{ fontSize: 'clamp(44px, 8vw, 96px)', lineHeight: 0.95, margin: '18px 28px 26px', color: 'var(--fresh)' }}>
+        <h1 className="display" style={{ fontSize: 'clamp(32px, 4.5vw, 56px)', lineHeight: 1, margin: '14px 20px 20px', color: 'var(--fresh)' }}>
           {t.albums}
         </h1>
         {albums === null ? (

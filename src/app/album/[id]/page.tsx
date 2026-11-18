@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { communityLevels, EMOJI, Photo, Stats } from '@/lib/photo'
 import { useLang } from '@/lib/LanguageContext'
 import { useSession } from '@/lib/SessionContext'
-import { Heart, IconClose, SiteFooter, SiteHeader } from '@/components/ui'
+import { Heart, IconClose, IconCompass, SiteFooter, SiteHeader } from '@/components/ui'
 import { Wall } from '@/components/Wall'
 import { Focus } from '@/components/Focus'
 import { Kompass } from '@/components/Kompass'
@@ -97,12 +97,22 @@ export default function AlbumPage() {
     if (ready) loadRatings().catch(() => {})
   }, [ready, user?.email, loadRatings])
 
+  // Die Anleitung klappt nur beim ersten Besuch auf schmalen Bildschirmen von selbst auf;
+  // auf breiten steht die Kurzform ohnehin in der Leiste.
   useEffect(() => {
+    if (window.innerWidth >= 1280) return
     try {
       setHint(localStorage.getItem('hint-off') !== '1')
     } catch {
       setHint(true)
     }
+  }, [])
+
+  const closeHint = useCallback(() => {
+    setHint(false)
+    try {
+      localStorage.setItem('hint-off', '1')
+    } catch {}
   }, [])
 
   // Direktlink auf ein Bild: /album/3?focus=<assetId>
@@ -203,37 +213,31 @@ export default function AlbumPage() {
 
   return (
     <>
-      <SiteHeader
-        hideFavLink
-        left={
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-            <Link href="/" style={{ fontSize: 13, color: 'var(--muted)', textDecoration: 'none' }}>
-              ← {t.allAlbums}
-            </Link>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px 16px', flexWrap: 'wrap' }}>
-              <h1 className="display" style={{ margin: 0, fontSize: 34, lineHeight: 1.1, color: 'var(--fresh)' }}>
-                {album?.title || ' '}
-              </h1>
-              {photos && (
-                <span style={{ fontSize: 13, color: 'var(--muted)' }}>
-                  {t.photos(photos.length)} · {t.shapedBy(total)}
-                </span>
-              )}
-            </div>
-          </div>
-        }
-      >
+      <SiteHeader hideFavLink title={album?.title}>
+        {canRate && photos && photos.length > 0 && (
+          <>
+            <span className="legend" aria-hidden="true">
+              {t.hintTap} <span className="e">{EMOJI[1]}</span> <i>·</i> {t.hintHold} <span className="e">{EMOJI[2]} {EMOJI[3]} {EMOJI[4]}</span>
+            </span>
+            <button className="pill icon help" aria-label={t.howToRate} aria-expanded={hint} onClick={() => (hint ? closeHint() : setHint(true))}>
+              ?
+            </button>
+          </>
+        )}
         <span className="seg" role="group">
           <button aria-pressed={mode === 'all'} onClick={() => pickMode('all')}>
-            {t.wallAll}
+            <span className="long">{t.wallAll}</span>
+            <span className="short">{t.wallAllShort}</span>
           </button>
           <button aria-pressed={mode === 'mine'} onClick={() => pickMode('mine')}>
-            {t.wallMine}
+            <span className="long">{t.wallMine}</span>
+            <span className="short">{t.wallMineShort}</span>
           </button>
         </span>
         <button
           className={`pill${onlyFav ? ' pill-red' : ''}`}
           aria-pressed={onlyFav}
+          aria-label={`${onlyFav ? t.onlyFavs : t.favorites}: ${favs.size}`}
           onClick={() => {
             if (!user) openLogin('fav')
             else setOnlyFav(!onlyFav)
@@ -246,22 +250,32 @@ export default function AlbumPage() {
           ) : (
             <Heart on={favs.size > 0} size={16} />
           )}
-          {onlyFav ? t.onlyFavs : t.favorites} · {favs.size}
+          <span className="txt wide">{onlyFav ? t.onlyFavs : t.favorites} ·</span> {favs.size}
         </button>
         {canRate && photos && photos.length > 0 && (
-          <button className="pill" onClick={() => setKompass(true)}>
-            {t.toKompass}
+          <button className="pill" aria-label={t.toKompass} title={t.toKompass} onClick={() => setKompass(true)}>
+            <IconCompass size={18} />
+            <span className="txt">{t.kompassShort}</span>
           </button>
         )}
       </SiteHeader>
 
-      {(album?.description || (album && !album.open) || album?.lottery) && (
-        <div style={{ padding: '0 28px 14px', fontSize: 14, color: 'var(--muted)', display: 'flex', gap: '4px 20px', flexWrap: 'wrap' }}>
+      <div className="album-hero">
+        <Link href="/" className="back">
+          ← {t.allAlbums}
+        </Link>
+        <h1 className="display">{album?.title || ' '}</h1>
+        <div className="meta">
+          {photos && (
+            <span>
+              {t.photos(photos.length)} · {t.shapedBy(total)}
+            </span>
+          )}
           {album?.description && <span style={{ color: '#d5dbe6' }}>{album.description}</span>}
           {album?.lottery && <span>{t.lotteryNote}</span>}
           {album && !album.open && <span>{t.votingClosed}</span>}
         </div>
-      )}
+      </div>
 
       <main>
         {error ? (
@@ -286,31 +300,19 @@ export default function AlbumPage() {
       <SiteFooter />
 
       {hint && canRate && photos && photos.length > 0 && !kompass && focusIndex < 0 && (
-        <div className="glass glass-dk hintbar">
-          <span>
-            <b>{t.hintTap}</b> {EMOJI[1]} {t.names[1]}
-          </span>
-          <span>
-            <b>{t.hintHold}</b> {EMOJI[2]} {t.names[2]} {EMOJI[3]} {t.names[3]} {EMOJI[4]} {t.names[4]}
-          </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <b>{t.hintHeart}</b> <Heart on={false} size={16} /> {t.hintFav}
-          </span>
-          <button className="pill pill-light" onClick={() => setKompass(true)}>
-            {t.toKompass} →
-          </button>
-          <button
-            className="x"
-            aria-label={t.hintDismiss}
-            onClick={() => {
-              setHint(false)
-              try {
-                localStorage.setItem('hint-off', '1')
-              } catch {}
-            }}
-          >
+        <div className="glass glass-dk howto" role="dialog" aria-label={t.howToRate}>
+          <button className="x" aria-label={t.hintDismiss} onClick={closeHint}>
             <IconClose size={16} />
           </button>
+          <div>
+            <b>{t.hintTap}</b> {EMOJI[1]} {t.names[1]}
+          </div>
+          <div>
+            <b>{t.hintHold}</b> {EMOJI[2]} {t.names[2]} → {EMOJI[3]} {t.names[3]} → {EMOJI[4]} {t.names[4]}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <b>{t.hintHeart}</b> <Heart on={false} size={16} /> {t.hintFav}
+          </div>
         </div>
       )}
 

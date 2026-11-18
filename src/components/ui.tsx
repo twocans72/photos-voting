@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { ReactNode } from 'react'
+import { ReactNode, useEffect, useState } from 'react'
 import { useLang } from '@/lib/LanguageContext'
 import { useSession } from '@/lib/SessionContext'
 
@@ -27,6 +27,8 @@ function Stroke({ d, size = 20 }: { d: string; size?: number }) {
 export const IconExpand = ({ size = 18 }: { size?: number }) => <Stroke size={size} d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
 export const IconPrev = () => <Stroke d="M15 5l-7 7 7 7" />
 export const IconNext = () => <Stroke d="M9 5l7 7-7 7" />
+export const IconCompass = ({ size = 20 }: { size?: number }) => <Stroke size={size} d="M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18zM15.5 8.5l-2 5-5 2 2-5z" />
+export const IconUser = ({ size = 20 }: { size?: number }) => <Stroke size={size} d="M12 12a4 4 0 1 0 0-8a4 4 0 0 0 0 8zM4.5 20a7.5 7.5 0 0 1 15 0" />
 export const IconClose = ({ size = 20 }: { size?: number }) => <Stroke size={size} d="M5 5l14 14M19 5L5 19" />
 
 export function LangToggle() {
@@ -54,38 +56,54 @@ export function LangToggle() {
   )
 }
 
-/** Kopfzeile aller öffentlichen Seiten. `left` ersetzt das Logo (Albumseite). */
-export function SiteHeader({ left, children, hideFavLink }: { left?: ReactNode; children?: ReactNode; hideFavLink?: boolean }) {
+/**
+ * Fixe Leiste aller öffentlichen Seiten: Logo, Werkzeuge der Seite (`children`), Sprache, Konto.
+ * `title` erscheint klein in der Leiste, sobald der grosse Seitentitel weggescrollt ist.
+ */
+export function SiteHeader({ title, children, hideFavLink }: { title?: string; children?: ReactNode; hideFavLink?: boolean }) {
   const { t } = useLang()
   const { user, ready, openLogin } = useSession()
+  const [scrolled, setScrolled] = useState(false)
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 70)
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
   return (
-    <header className="site-header">
-      {left || (
-        <Link href="/" aria-label="Peduzzi Photos" style={{ display: 'inline-flex', alignItems: 'center', minHeight: 44 }}>
+    <>
+      <header className={`topbar${scrolled ? ' scrolled' : ''}${children ? ' has-tools' : ''}`}>
+        <Link href="/" className="brand" aria-label={`Peduzzi Photos – ${t.allAlbums}`}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="Peduzzi Photos" style={{ height: 34, width: 'auto', display: 'block' }} />
+          <img className="logo-full" src="/logo.png" alt="Peduzzi Photos" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img className="logo-mark" src="/logo-mark.png" alt="Peduzzi Photos" />
         </Link>
-      )}
-      <nav className="site-nav">
-        {children}
-        {!hideFavLink && (
-          <Link className="link" href="/favoriten">
-            {t.favorites}
-          </Link>
-        )}
-        <LangToggle />
-        {ready &&
-          (user ? (
-            <Link className="pill" href="/konto">
-              {t.account}
+        {title && <span className="display bar-title">{title}</span>}
+        <nav className="site-nav">
+          {children}
+          {!hideFavLink && (
+            <Link className="link" href="/favoriten">
+              {t.favorites}
             </Link>
-          ) : (
-            <button className="pill pill-solid" onClick={() => openLogin()}>
-              {t.signIn}
-            </button>
-          ))}
-      </nav>
-    </header>
+          )}
+          <LangToggle />
+          {ready &&
+            (user ? (
+              <Link className="pill acct" href="/konto" aria-label={t.account}>
+                <IconUser size={18} />
+                <span className="txt">{t.account}</span>
+              </Link>
+            ) : (
+              <button className="pill pill-solid acct" onClick={() => openLogin()} aria-label={t.signIn}>
+                <IconUser size={18} />
+                <span className="txt">{t.signIn}</span>
+              </button>
+            ))}
+        </nav>
+      </header>
+      <div className="topbar-space" />
+    </>
   )
 }
 

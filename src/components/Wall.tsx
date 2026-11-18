@@ -66,11 +66,13 @@ export function Wall({ photos, levels, mine, favs, canRate, onRate, onFav, onFoc
   const press = useRef<{ id: string; t: number; x: number; y: number } | null>(null)
   const timer = useRef<ReturnType<typeof setInterval> | null>(null)
   const anchor = useRef<{ id: string; top: number } | null>(null)
+  const shownHl = useRef(-1) // zuletzt angezeigte Halte-Stufe
 
   const stop = () => {
     if (timer.current) clearInterval(timer.current)
     timer.current = null
     press.current = null
+    shownHl.current = -1
     setHold(null)
   }
   useEffect(() => stop, [])
@@ -95,6 +97,7 @@ export function Wall({ photos, levels, mine, favs, canRate, onRate, onFav, onFoc
       const p = press.current
       if (!p) return
       const hl = holdLevel(Date.now() - p.t)
+      shownHl.current = hl
       setHold((h) => (h && h.id === p.id && h.hl !== hl ? { id: p.id, hl } : h))
     }, 80)
   }
@@ -107,7 +110,9 @@ export function Wall({ photos, levels, mine, favs, canRate, onRate, onFav, onFoc
   const up = (e: PointerEvent<HTMLButtonElement>, id: string) => {
     const p = press.current
     if (!p || p.id !== id) return
-    const hl = holdLevel(Date.now() - p.t)
+    // Nicht neu aus der Uhr rechnen: zwischen letzter Anzeige und Loslassen kann die
+    // Stufe sonst weiterspringen, und man bekäme etwas anderes als angezeigt.
+    const hl = shownHl.current >= 0 ? shownHl.current : holdLevel(Date.now() - p.t)
     stop()
     const value = hl < 0 ? (mine[id] === 1 ? 0 : 1) : 2 + hl
     anchor.current = { id, top: e.currentTarget.getBoundingClientRect().top }
