@@ -72,14 +72,14 @@ export class ImmichApiError extends Error {
 }
 // Immich v3 removed `assets` from the album response (immich-app/immich#27835).
 // The metadata search endpoint works on old and new versions and supports paging.
-export async function getAlbumAssets(albumId: string): Promise<ImmichAsset[]> {
+export async function getAlbumAssets(albumId: string, withExif = true): Promise<ImmichAsset[]> {
   const all: ImmichAsset[] = []
   let page = 1
   for (;;) {
     const res = await fetch(`${IMMICH_URL}/api/search/metadata`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ albumIds: [albumId], withExif: true, size: SEARCH_PAGE_SIZE, page }),
+      body: JSON.stringify({ albumIds: [albumId], withExif, size: SEARCH_PAGE_SIZE, page }),
       cache: 'no-store',
     })
     if (!res.ok) throw new ImmichApiError(res.status, 'POST /api/search/metadata')

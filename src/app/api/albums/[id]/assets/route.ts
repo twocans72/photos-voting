@@ -4,9 +4,10 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
 import { getAlbum, getAlbumAssets, ImmichApiError, ImmichAsset } from '@/lib/immich'
+import { recordAssets } from '@/lib/sync'
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
-  const album = getDb().prepare('SELECT * FROM albums WHERE id = ? AND is_visible = 1').get(params.id) as { immich_id: string } | undefined
+  const album = getDb().prepare('SELECT * FROM albums WHERE id = ? AND is_visible = 1').get(params.id) as { id: number; immich_id: string } | undefined
   if (!album) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   let assets: ImmichAsset[]
   try {
@@ -29,5 +30,28 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ error: 'immich_unavailable', status }, { status: 502 })
     }
   }
-  return NextResponse.json(assets.filter(a => a.type === 'IMAGE'))
+  const images = assets.filter((a) => a.type === 'IMAGE')
+  // Hält die Bildliste des Albums aktuell: Grundlage für Stimmen und «neue Bilder».
+  recordAssets(album.id, images.map((a) => a.id))
+
+  return NextResponse.json(
+    images.map((a) => {
+      const e = a.exifInfo || {}
+      return {
+        id: a.id,
+        w: a.width || e.exifImageWidth || 4,
+        h: a.height || e.exifImageHeight || 3,
+        date: a.fileCreatedAt,
+        name: a.originalFileName,
+        exif: {
+          camera: [e.make, e.model].filter(Boolean).join(' ') || null,
+          lens: e.lensModel || null,
+          focal: e.focalLength || null,
+          f: e.fNumber || null,
+          exp: e.exposureTime || null,
+          iso: e.iso || null,
+        },
+      }
+    })
+  )
 }

@@ -1,37 +1,41 @@
-import type { Metadata } from 'next'
-import { Cormorant_Garamond, DM_Sans, Raleway } from 'next/font/google'
+import type { Metadata, Viewport } from 'next'
+import { Inter } from 'next/font/google'
+import localFont from 'next/font/local'
 import './globals.css'
 import { LanguageProvider } from '@/lib/LanguageContext'
+import { SessionProvider } from '@/lib/SessionContext'
 
-const cormorant = Cormorant_Garamond({
-  subsets: ['latin'],
-  weight: ['300', '400', '500', '600'],
+// Bricolage Grotesque (SIL Open Font License), lateinischer Zeichensatz, selbst
+// gehostet: next/font/google kann diese Schrift in Next 14.2 nicht laden.
+const display = localFont({
+  src: '../fonts/BricolageGrotesque.woff2',
+  weight: '500 800',
+  display: 'swap',
   variable: '--font-display',
 })
 
-const dmSans = DM_Sans({
+const body = Inter({
   subsets: ['latin'],
   variable: '--font-body',
 })
 
-const raleway = Raleway({
-  subsets: ['latin'],
-  weight: ['200', '300'],
-  variable: '--font-raleway',
-})
-
 export const metadata: Metadata = {
   title: 'Peduzzi Photos',
-  description: 'Entdecke und bewerte unsere Fotoalben',
-  viewport: 'width=device-width, initial-scale=1, maximum-scale=1',
+  description: 'Fotoalben ansehen und bewerten',
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  themeColor: '#211a33',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="de" className={`${cormorant.variable} ${dmSans.variable} ${raleway.variable}`}>
+    <html lang="de" className={`${display.variable} ${body.variable}`}>
       <body className="bg-surface text-text-primary font-body antialiased min-h-screen">
         <LanguageProvider>
-          {children}
+          <SessionProvider>{children}</SessionProvider>
         </LanguageProvider>
       </body>
     </html>

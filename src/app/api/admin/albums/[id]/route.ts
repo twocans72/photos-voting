@@ -11,7 +11,15 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   const db = getDb()
   const fields: string[] = []
   const values: unknown[] = []
-  if (body.is_visible !== undefined) { fields.push('is_visible = ?'); values.push(body.is_visible ? 1 : 0) }
+  if (body.is_visible !== undefined) {
+    fields.push('is_visible = ?')
+    values.push(body.is_visible ? 1 : 0)
+    // Zeitpunkt merken: neu sichtbare Alben werden erst nach einer Ruhezeit angekündigt.
+    if (body.is_visible) {
+      fields.push('visible_at = ?')
+      values.push(Date.now())
+    }
+  }
   if (body.voting_enabled !== undefined) { fields.push('voting_enabled = ?'); values.push(body.voting_enabled ? 1 : 0) }
   if (body.voting_start !== undefined) { fields.push('voting_start = ?'); values.push(body.voting_start || null) }
   if (body.voting_end !== undefined) { fields.push('voting_end = ?'); values.push(body.voting_end || null) }
@@ -25,7 +33,15 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   if (!getAdminFromRequest()) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const album = getDb().prepare(`SELECT a.*, (SELECT COUNT(*) FROM votes v WHERE v.album_id=a.id) as vote_count, (SELECT COUNT(*) FROM lottery_participants lp WHERE lp.album_id=a.id) as lottery_count FROM albums a WHERE a.id=?`).get(params.id)
+  const album = getDb()
+    .prepare(
+      `SELECT a.*,
+        (SELECT COUNT(*) FROM ratings r WHERE r.album_id = a.id) AS vote_count,
+        (SELECT COUNT(DISTINCT r.user_id) FROM ratings r WHERE r.album_id = a.id AND r.user_id IS NOT NULL) AS lottery_count,
+        (SELECT COUNT(DISTINCT COALESCE('u' || r.user_id, 'v' || r.visitor)) FROM ratings r WHERE r.album_id = a.id) AS voter_count
+       FROM albums a WHERE a.id = ?`
+    )
+    .get(params.id)
   if (!album) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   return NextResponse.json(album)
 }

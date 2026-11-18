@@ -4,6 +4,7 @@ module.exports = {
     './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',
     './src/app/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/lib/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
     extend: {
@@ -12,21 +13,22 @@ module.exports = {
         body: ['var(--font-body)'],
       },
       colors: {
+        // Palette des Umbaus 2026-11: Pflaumenviolett, Blau, helles Blaugrau
         surface: {
-          DEFAULT: '#0f0f0f',
-          1: '#161616',
-          2: '#1e1e1e',
-          3: '#262626',
+          DEFAULT: '#211a33',
+          1: '#1a1429',
+          2: '#2a2240',
+          3: '#3a3154',
         },
         accent: {
-          DEFAULT: '#e8d5b0',
-          warm: '#d4a853',
-          muted: '#a89070',
+          DEFAULT: '#358de5',
+          warm: '#5ba5ee',
+          muted: '#2a6fb8',
         },
         text: {
-          primary: '#f0ebe3',
-          secondary: '#9a9086',
-          muted: '#5a5550',
+          primary: '#edf2f7',
+          secondary: '#a5b1c2',
+          muted: '#8a94a8',
         },
         gold: {
           1: '#FFD700',

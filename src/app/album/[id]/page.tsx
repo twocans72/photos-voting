@@ -1,583 +1,343 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { Album, getVotingStatus, VoteStats } from '@/types'
-import type { ImmichAsset } from '@/lib/immich'
-import { useLang, LangToggle } from '@/lib/LanguageContext'
-import { Logo } from '@/components/Logo'
+import { communityLevels, EMOJI, Photo, Stats } from '@/lib/photo'
+import { useLang } from '@/lib/LanguageContext'
+import { useSession } from '@/lib/SessionContext'
+import { Heart, IconClose, SiteFooter, SiteHeader } from '@/components/ui'
+import { Wall } from '@/components/Wall'
+import { Focus } from '@/components/Focus'
+import { Kompass } from '@/components/Kompass'
 
-type PickSlot = 1 | 2 | 3
-type SortKey = 'dateDesc' | 'dateAsc' | 'name' | 'random' | 'score'
-type Tab = 'photos' | 'results'
-
-interface AlbumWithStatus extends Album {
-  votingStatus?: ReturnType<typeof getVotingStatus>
+interface AlbumInfo {
+  id: number
+  title: string
+  description: string | null
+  asset_count: number
+  lottery: boolean
+  open: boolean
 }
 
-const RANK_COLORS = {
-  1: { ring: 'ring-yellow-400', badge: 'bg-yellow-400 text-black', btn: 'bg-yellow-400 text-black hover:bg-yellow-300', label: '🥇' },
-  2: { ring: 'ring-gray-300', badge: 'bg-gray-300 text-black', btn: 'bg-gray-300 text-black hover:bg-gray-200', label: '🥈' },
-  3: { ring: 'ring-amber-600', badge: 'bg-amber-600 text-white', btn: 'bg-amber-600 text-white hover:bg-amber-500', label: '🥉' },
-}
-
-const GRID_WIDTH = 1200 // px, matches max-w-7xl approx
-const GAP = 4 // px gap between cells
-
-// A row contains 2 or 3 assets.
-// The "lead" asset determines the row height based on its aspect ratio and assigned width.
-// All assets in a row share the same height.
-interface RowCell { asset: ImmichAsset; flex: number }
-interface Row { cells: RowCell[]; height: number }
-
-function getAspect(asset: ImmichAsset): number {
-  const w = asset.exifInfo?.exifImageWidth || asset.width
-  const h = asset.exifInfo?.exifImageHeight || asset.height
-  if (w && h) return w / h
-  return 4 / 3 // fallback
-}
-
-function buildRows(assets: ImmichAsset[]): Row[] {
-  const rows: Row[] = []
-  let i = 0
-
-  while (i < assets.length) {
-    const remaining = assets.length - i
-    const r = Math.random()
-
-    // Decide row pattern
-    let pattern: ('wide' | 'normal')[]
-
-    if (remaining === 1) {
-      pattern = ['wide'] // last single image gets 2/3 width
-    } else if (remaining === 2) {
-      pattern = ['normal', 'normal']
-    } else {
-      // 3 or more remaining
-      if (r < 0.15) pattern = ['wide', 'normal']       // 2/3 + 1/3
-      else if (r < 0.30) pattern = ['normal', 'wide']  // 1/3 + 2/3
-      else pattern = ['normal', 'normal', 'normal']     // 3 equal
-    }
-
-    const cells: RowCell[] = pattern.map((p, idx) => ({
-      asset: assets[i + idx],
-      flex: p === 'wide' ? 2 : 1,
-    }))
-
-    // Lead cell is the widest one; use its aspect ratio to compute row height
-    const leadCell = cells.reduce((a, b) => a.flex >= b.flex ? a : b)
-    const leadAspect = getAspect(leadCell.asset)
-    const totalFlex = cells.reduce((sum, c) => sum + c.flex, 0)
-    const gapTotal = (cells.length - 1) * GAP
-    const leadWidth = (GRID_WIDTH - gapTotal) * (leadCell.flex / totalFlex)
-    const rowHeight = Math.round(leadWidth / leadAspect)
-
-    // Clamp height between 200 and 500px
-    const clampedHeight = Math.min(500, Math.max(200, rowHeight))
-
-    rows.push({ cells, height: clampedHeight })
-    i += pattern.length
-  }
-
-  return rows
-}
-
-function sortAssets(assets: ImmichAsset[], sort: SortKey, stats: { stats: VoteStats[] } | null): ImmichAsset[] {
-  const arr = [...assets]
-  switch (sort) {
-    case 'dateDesc': return arr.sort((a, b) => new Date(b.fileCreatedAt || 0).getTime() - new Date(a.fileCreatedAt || 0).getTime())
-    case 'dateAsc': return arr.sort((a, b) => new Date(a.fileCreatedAt || 0).getTime() - new Date(b.fileCreatedAt || 0).getTime())
-    case 'name': return arr.sort((a, b) => a.originalFileName.localeCompare(b.originalFileName))
-    case 'random': return arr.sort(() => Math.random() - 0.5)
-    case 'score': {
-      const scoreMap = new Map(stats?.stats.map(s => [s.asset_id, s.score]) || [])
-      return arr.sort((a, b) => (scoreMap.get(b.id) || 0) - (scoreMap.get(a.id) || 0))
-    }
-    default: return arr
-  }
-}
+type Mode = 'mine' | 'all'
 
 export default function AlbumPage() {
-  const params = useParams()
-  const albumId = params.id as string
+  const id = useParams().id as string
   const { t } = useLang()
+  const { user, ready, openLogin } = useSession()
 
-  const [album, setAlbum] = useState<AlbumWithStatus | null>(null)
-  const [assets, setAssets] = useState<ImmichAsset[]>([])
-  const [picks, setPicks] = useState<Record<PickSlot, string | null>>({ 1: null, 2: null, 3: null })
-  const [stats, setStats] = useState<{ totalVotes: number; stats: VoteStats[] } | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [assetsError, setAssetsError] = useState<{ status: number } | null>(null)
-  const [submitting, setSubmitting] = useState(false)
-  const [showLotteryForm, setShowLotteryForm] = useState(false)
-  const [email, setEmail] = useState('')
-  const [name, setName] = useState('')
-  const [submitted, setSubmitted] = useState(false)
-  const [lightbox, setLightbox] = useState<string | null>(null)
-  const [sortKey, setSortKey] = useState<SortKey>('dateDesc')
-  const [activeTab, setActiveTab] = useState<Tab>('photos')
-  const [showBackToTop, setShowBackToTop] = useState(false)
-  const [rows, setRows] = useState<Row[]>([])
-  const [windowWidth, setWindowWidth] = useState(1200)
+  const [album, setAlbum] = useState<AlbumInfo | null>(null)
+  const [photos, setPhotos] = useState<Photo[] | null>(null)
+  const [mine, setMine] = useState<Record<string, number>>({})
+  const [favs, setFavs] = useState<Set<string>>(new Set())
+  const [all, setAll] = useState<Stats>({})
+  const [error, setError] = useState<null | { notFound?: boolean; status?: number }>(null)
+  const [mode, setMode] = useState<Mode>('mine')
+  const [onlyFav, setOnlyFav] = useState(false)
+  const [focusId, setFocusId] = useState<string | null>(null)
+  const [kompass, setKompass] = useState(false)
+  const [hint, setHint] = useState(false)
+  const [toast, setToast] = useState<string | null>(null)
+  const modeSet = useRef(false)
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  useEffect(() => {
-    const update = () => setWindowWidth(window.innerWidth)
-    update()
-    window.addEventListener('resize', update)
-    return () => window.removeEventListener('resize', update)
+  const say = useCallback((msg: string) => {
+    setToast(msg)
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(null), 3500)
   }, [])
 
+  // Bilder des Albums (einmal pro Album)
   useEffect(() => {
-    const onScroll = () => setShowBackToTop(window.scrollY > 400)
-    window.addEventListener('scroll', onScroll)
-    return () => window.removeEventListener('scroll', onScroll)
-  }, [])
-
-  useEffect(() => {
-    Promise.all([
-      fetch(`/api/albums`).then(r => r.json()),
-      fetch(`/api/albums/${albumId}/assets`).then(r => r.json().catch(() => ({ error: 'invalid_json', status: r.status }))).catch(() => ({ error: 'network', status: 0 })),
-      fetch(`/api/albums/${albumId}/votes`).then(r => r.json()),
-      fetch(`/api/albums/${albumId}/stats`).then(r => r.json()),
-    ]).then(([albums, assetsData, voteStatus, statsData]) => {
-      const found = (albums as Album[]).find(a => a.id === parseInt(albumId))
-      if (found) setAlbum({ ...found, votingStatus: getVotingStatus(found) })
-      if (Array.isArray(assetsData)) {
-        setAssets(assetsData)
-        setRows(buildRows(assetsData))
-      } else {
-        setAssetsError({ status: Number(assetsData?.status) || 0 })
-      }
-      if (voteStatus.voted && voteStatus.vote) {
-        setPicks({ 1: voteStatus.vote.rank1_asset_id, 2: voteStatus.vote.rank2_asset_id, 3: voteStatus.vote.rank3_asset_id })
-        setSubmitted(true)
-      }
-      if (statsData.stats) setStats(statsData)
-      setLoading(false)
-    }).catch(() => setLoading(false))
-  }, [albumId])
-
-  const getRankForAsset = (assetId: string): PickSlot | null => {
-    for (const rank of [1, 2, 3] as PickSlot[]) {
-      if (picks[rank] === assetId) return rank
-    }
-    return null
-  }
-
-  const handleRankClick = useCallback((assetId: string, rank: PickSlot, e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (!album?.votingStatus?.isOpen || submitted) return
-    setPicks(prev => {
-      const newPicks = { ...prev }
-      if (prev[rank] === assetId) { newPicks[rank] = null; return newPicks }
-      for (const r of [1, 2, 3] as PickSlot[]) { if (prev[r] === assetId) newPicks[r] = null }
-      newPicks[rank] = assetId
-      return newPicks
-    })
-  }, [album, submitted])
-
-  const handleSubmit = async () => {
-    if (!picks[1]) return
-    setSubmitting(true)
-    try {
-      const res = await fetch(`/api/albums/${albumId}/votes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rank1: picks[1], rank2: picks[2] || undefined, rank3: picks[3] || undefined, email: email || undefined, name: name || undefined }),
+    let alive = true
+    setPhotos(null)
+    setError(null)
+    fetch(`/api/albums/${id}/assets`)
+      .then(async (r) => {
+        if (r.status === 404) throw { notFound: true }
+        const data = await r.json()
+        if (!r.ok) throw { status: data.status || r.status }
+        return data as Photo[]
       })
-      if (res.ok) {
-        setSubmitted(true)
-        setShowLotteryForm(false)
-        const statsData = await fetch(`/api/albums/${albumId}/stats`).then(r => r.json())
-        if (statsData.stats) setStats(statsData)
-        setActiveTab('results')
-      }
-    } finally {
-      setSubmitting(false)
+      .then((list) => {
+        if (!alive) return
+        setPhotos(list.sort((a, b) => a.date.localeCompare(b.date)))
+      })
+      .catch((e) => alive && setError(e && (e.notFound || e.status !== undefined) ? e : { status: 0 }))
+    return () => {
+      alive = false
     }
-  }
+  }, [id])
 
-  const getStatsForAsset = (assetId: string) => stats?.stats.find(s => s.asset_id === assetId)
+  // Stimmen und Favoriten (neu laden, wenn sich das Konto ändert)
+  const loadRatings = useCallback(async () => {
+    const r = await fetch(`/api/albums/${id}/ratings`, { cache: 'no-store' })
+    if (!r.ok) {
+      if (r.status === 404) setError({ notFound: true })
+      return
+    }
+    const data = await r.json()
+    setAlbum(data.album)
+    setMine(data.mine)
+    setFavs(new Set(data.favs))
+    setAll(data.all)
+    if (!modeSet.current) {
+      modeSet.current = true
+      let saved: string | null = null
+      try {
+        saved = localStorage.getItem('wall-mode')
+      } catch {}
+      if (saved === 'mine' || saved === 'all') setMode(saved)
+      else if (Object.keys(data.mine).length === 0 && data.total >= 5) setMode('all')
+    }
+  }, [id])
 
-  const showResultsTab = submitted || (album?.votingStatus?.hasEnded ?? false)
-  const sortedAssets = sortAssets(assets, sortKey, stats)
-
-  // Rebuild rows when sort changes, keeping same random seed per asset order
-  const [sortedRows, setSortedRows] = useState<Row[]>([])
   useEffect(() => {
-    if (sortedAssets.length > 0) setSortedRows(buildRows(sortedAssets))
-  }, [sortKey, assets])
+    if (ready) loadRatings().catch(() => {})
+  }, [ready, user?.email, loadRatings])
 
-  const availableSorts: { key: SortKey; label: string }[] = [
-    { key: 'dateDesc', label: t.sortDateDesc },
-    { key: 'dateAsc', label: t.sortDateAsc },
-    { key: 'name', label: t.sortName },
-    { key: 'random', label: t.sortRandom },
-    ...(showResultsTab ? [{ key: 'score' as SortKey, label: t.sortScore }] : []),
-  ]
+  useEffect(() => {
+    try {
+      setHint(localStorage.getItem('hint-off') !== '1')
+    } catch {
+      setHint(true)
+    }
+  }, [])
 
-  // Lightbox navigation order follows what is currently visible
-  const lightboxIds: string[] = activeTab === 'results' && stats
-    ? stats.stats.map(s => s.asset_id)
-    : (sortedRows.length > 0 ? sortedRows : rows).flatMap(r => r.cells.map(c => c.asset.id))
+  // Direktlink auf ein Bild: /album/3?focus=<assetId>
+  useEffect(() => {
+    if (!photos) return
+    const wanted = new URLSearchParams(window.location.search).get('focus')
+    if (wanted && photos.some((p) => p.id === wanted)) setFocusId(wanted)
+  }, [photos])
 
-  const navigateLightbox = useCallback((dir: 1 | -1) => {
-    setLightbox(cur => {
-      if (!cur) return cur
-      const idx = lightboxIds.indexOf(cur)
-      if (idx === -1 || lightboxIds.length === 0) return cur
-      return lightboxIds[(idx + dir + lightboxIds.length) % lightboxIds.length]
+  const applyLocal = useCallback((assetId: string, prev: number, value: number) => {
+    setMine((m) => {
+      const n = { ...m }
+      if (value) n[assetId] = value
+      else delete n[assetId]
+      return n
     })
-  }, [lightboxIds.join(',')]) // eslint-disable-line react-hooks/exhaustive-deps
+    setAll((a) => {
+      const c = [...(a[assetId] || [0, 0, 0, 0])] as [number, number, number, number]
+      if (prev) c[prev - 1] = Math.max(0, c[prev - 1] - 1)
+      if (value) c[value - 1] += 1
+      return { ...a, [assetId]: c }
+    })
+  }, [])
 
-  useEffect(() => {
-    if (!lightbox) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight') navigateLightbox(1)
-      else if (e.key === 'ArrowLeft') navigateLightbox(-1)
-      else if (e.key === 'Escape') setLightbox(null)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [lightbox, navigateLightbox])
+  const rate = useCallback(
+    (assetId: string, value: number) => {
+      const prev = mine[assetId] || 0
+      if (prev === value) return
+      applyLocal(assetId, prev, value)
+      fetch(`/api/albums/${id}/ratings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assetId, value }) })
+        .then((r) => {
+          if (!r.ok) throw r.status
+        })
+        .catch((status) => {
+          applyLocal(assetId, value, prev)
+          say(status === 403 ? t.votingClosed : status === 429 ? t.tooMany : t.errorGeneric)
+        })
+    },
+    [mine, id, applyLocal, say, t]
+  )
 
-  const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null)
-  const onLightboxTouchStart = (e: React.TouchEvent) => {
-    const t0 = e.touches[0]
-    setTouchStart({ x: t0.clientX, y: t0.clientY })
+  const toggleFav = useCallback(
+    (assetId: string) => {
+      if (!user) {
+        openLogin('fav')
+        return
+      }
+      const on = !favs.has(assetId)
+      const flip = (to: boolean) =>
+        setFavs((f) => {
+          const n = new Set(f)
+          if (to) n.add(assetId)
+          else n.delete(assetId)
+          return n
+        })
+      flip(on)
+      fetch('/api/favorites', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ albumId: Number(id), assetId, on }) })
+        .then(async (r) => {
+          if (!r.ok) throw r.status
+          const data = await r.json()
+          // Ein Herz auf einem unbewerteten Bild hat serverseitig «Love it» gesetzt
+          if (data.rating) applyLocal(assetId, 0, data.rating)
+        })
+        .catch(() => {
+          flip(!on)
+          say(t.errorGeneric)
+        })
+    },
+    [user, favs, id, openLogin, applyLocal, say, t]
+  )
+
+  const pickMode = (m: Mode) => {
+    setMode(m)
+    try {
+      localStorage.setItem('wall-mode', m)
+    } catch {}
   }
-  const onLightboxTouchEnd = (e: React.TouchEvent) => {
-    if (!touchStart) return
-    const t0 = e.changedTouches[0]
-    const dx = t0.clientX - touchStart.x
-    const dy = t0.clientY - touchStart.y
-    setTouchStart(null)
-    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) navigateLightbox(dx < 0 ? 1 : -1)
+
+  const levels = useMemo(() => (mode === 'mine' || !photos ? mine : communityLevels(photos, all)), [mode, mine, photos, all])
+  const shown = useMemo(() => (photos ? (onlyFav ? photos.filter((p) => favs.has(p.id)) : photos) : []), [photos, onlyFav, favs])
+  const total = useMemo(() => Object.values(all).reduce((s, c) => s + c[0] + c[1] + c[2] + c[3], 0), [all])
+  const focusIndex = focusId ? shown.findIndex((p) => p.id === focusId) : -1
+  const canRate = !!album?.open
+
+  if (error?.notFound) {
+    return (
+      <>
+        <SiteHeader />
+        <main className="page">
+          <h1 className="display">{t.albumNotFound}</h1>
+          <Link className="pill" href="/">
+            ← {t.allAlbums}
+          </Link>
+        </main>
+      </>
+    )
   }
-
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="text-text-muted font-display text-2xl animate-pulse">{t.loading}</div></div>
-  if (!album) return <div className="min-h-screen flex items-center justify-center"><div className="text-text-muted">{t.albumNotFound}</div></div>
-
-  const votingStatus = album.votingStatus!
-  const isPickable = votingStatus.isOpen && !submitted
-  const picksCount = [picks[1], picks[2], picks[3]].filter(Boolean).length
-  const displayRows = sortedRows.length > 0 ? sortedRows : rows
 
   return (
-    <div className="grain min-h-screen">
-      <header className="border-b border-surface-3 px-4 sm:px-8 py-4 flex items-center gap-4 sm:gap-6">
-        <Link href="/" className="text-text-muted hover:text-accent transition-colors text-sm shrink-0">{t.back}</Link>
-        <div className="h-4 w-px bg-surface-3 shrink-0" />
-        <Link href="/" style={{ textDecoration: 'none', flexShrink: 0 }}>
-          <Logo size="small" />
-        </Link>
-        <div className="flex-1 min-w-0">
-          <h1 className="font-display text-xl sm:text-2xl font-light text-text-primary truncate">{album.title}</h1>
-          {album.description && <p className="text-text-muted text-xs mt-0.5 truncate">{album.description}</p>}
-        </div>
-        <LangToggle />
-      </header>
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-8 py-4 sm:py-8">
-
-        {votingStatus.isOpen && !submitted && (
-          <div className="mb-6 p-5 border border-accent/30 bg-accent/5">
-            <p className="font-display text-xl text-accent mb-1">{t.chooseTop3}</p>
-            <p className="text-text-secondary text-sm mb-4">
-              {t.clickToPlace}
-              {votingStatus.endDate && (
-                <span className="ml-2 text-text-muted">
-                  {t.votingEnds} {new Date(votingStatus.endDate).toLocaleDateString('de-CH', { day: '2-digit', month: 'long', year: 'numeric' })}
+    <>
+      <SiteHeader
+        hideFavLink
+        left={
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+            <Link href="/" style={{ fontSize: 13, color: 'var(--muted)', textDecoration: 'none' }}>
+              ← {t.allAlbums}
+            </Link>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px 16px', flexWrap: 'wrap' }}>
+              <h1 className="display" style={{ margin: 0, fontSize: 34, lineHeight: 1.1, color: 'var(--fresh)' }}>
+                {album?.title || ' '}
+              </h1>
+              {photos && (
+                <span style={{ fontSize: 13, color: 'var(--muted)' }}>
+                  {t.photos(photos.length)} · {t.shapedBy(total)}
                 </span>
               )}
-            </p>
-            <div className="flex gap-3 flex-wrap mb-4">
-              {([1, 2, 3] as PickSlot[]).map(rank => (
-                <div key={rank} className={`flex items-center gap-2 px-3 py-1.5 border text-sm ${picks[rank] ? 'border-accent/50 bg-accent/5' : 'border-surface-3 opacity-40'}`}>
-                  <span>{RANK_COLORS[rank].label}</span>
-                  <span className={picks[rank] ? 'text-text-secondary' : 'text-text-muted'}>{picks[rank] ? t.chosen : t.empty}</span>
-                </div>
-              ))}
             </div>
-            {picksCount > 0 && (
-              <div className="pt-4 border-t border-surface-3">
-                {!showLotteryForm ? (
-                  <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
-                    <div className="text-sm text-text-secondary">{picksCount === 3 ? t.allChosen : t.xOf3(picksCount)}</div>
-                    {album.lottery_enabled ? (
-                      <button onClick={() => setShowLotteryForm(true)} className="btn-primary text-sm py-2">{t.continueAndLottery}</button>
-                    ) : (
-                      <button onClick={handleSubmit} disabled={!picks[1] || submitting} className="btn-primary text-sm py-2 disabled:opacity-40">
-                        {submitting ? t.saving : t.vote}
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <div className="bg-surface-2 p-5 border border-surface-3 max-w-md">
-                    <p className="font-display text-lg text-accent mb-1">{t.joinLottery}</p>
-                    <p className="text-text-secondary text-sm mb-4">{t.lotteryDesc}</p>
-                    <input type="text" placeholder={t.namePlaceholder} value={name} onChange={e => setName(e.target.value)}
-                      className="w-full bg-surface-1 border border-surface-3 px-4 py-2.5 text-sm text-text-primary placeholder-text-muted mb-3 focus:outline-none focus:border-accent" />
-                    <input type="email" placeholder={t.emailPlaceholder} value={email} onChange={e => setEmail(e.target.value)}
-                      className="w-full bg-surface-1 border border-surface-3 px-4 py-2.5 text-sm text-text-primary placeholder-text-muted mb-4 focus:outline-none focus:border-accent" />
-                    <div className="flex gap-3">
-                      <button onClick={handleSubmit} disabled={submitting} className="btn-primary text-sm py-2 flex-1">
-                        {submitting ? t.saving : email ? t.voteAndJoin : t.onlyVote}
-                      </button>
-                      <button onClick={() => setShowLotteryForm(false)} className="btn-secondary text-sm py-2">{t.back2}</button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
-        )}
-
-        {submitted && (
-          <div className="mb-6 p-4 border border-green-800/40 bg-green-900/10">
-            <p className="font-display text-lg text-green-400">{t.thankYou}</p>
-            <p className="text-text-secondary text-sm mt-0.5">{t.thankYouDesc}</p>
-          </div>
-        )}
-
-        {votingStatus.hasEnded && !submitted && (
-          <div className="mb-6 p-4 border border-surface-3 bg-surface-1">
-            <p className="font-display text-lg text-text-primary">{t.votingClosed}</p>
-            {stats && <p className="text-text-muted text-sm mt-0.5">{t.peopleVoted(stats.totalVotes)}</p>}
-          </div>
-        )}
-
-        {/* Tabs + Sort */}
-        <div className="flex items-center justify-between mb-6 border-b border-surface-3">
-          <div className="flex">
-            <button onClick={() => setActiveTab('photos')}
-              className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${activeTab === 'photos' ? 'border-accent text-accent' : 'border-transparent text-text-muted hover:text-text-primary'}`}>
-              {t.tabPhotos} ({assets.length})
-            </button>
-            {showResultsTab && (
-              <button onClick={() => setActiveTab('results')}
-                className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${activeTab === 'results' ? 'border-accent text-accent' : 'border-transparent text-text-muted hover:text-text-primary'}`}>
-                {t.tabResults} {stats ? `(${stats.totalVotes})` : ''}
-              </button>
-            )}
-          </div>
-          {activeTab === 'photos' && (
-            <div className="flex items-center gap-2 pb-2">
-              <span className="text-text-muted text-xs">{t.sortBy}:</span>
-              <select value={sortKey} onChange={e => setSortKey(e.target.value as SortKey)}
-                className="bg-surface-2 border border-surface-3 text-text-secondary text-xs px-2 py-1 focus:outline-none focus:border-accent">
-                {availableSorts.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
-              </select>
-            </div>
+        }
+      >
+        <span className="seg" role="group">
+          <button aria-pressed={mode === 'all'} onClick={() => pickMode('all')}>
+            {t.wallAll}
+          </button>
+          <button aria-pressed={mode === 'mine'} onClick={() => pickMode('mine')}>
+            {t.wallMine}
+          </button>
+        </span>
+        <button
+          className={`pill${onlyFav ? ' pill-red' : ''}`}
+          aria-pressed={onlyFav}
+          onClick={() => {
+            if (!user) openLogin('fav')
+            else setOnlyFav(!onlyFav)
+          }}
+        >
+          {onlyFav ? (
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="#fff">
+              <path d="M12 20.5s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.6a4.3 4.3 0 0 1 7.5 2.7c0 5.6-7.5 10.2-7.5 10.2z" />
+            </svg>
+          ) : (
+            <Heart on={favs.size > 0} size={16} />
           )}
-        </div>
-
-        {assetsError && (
-          <div className="mb-6 p-4 border border-red-800/40 bg-red-900/10">
-            <p className="text-red-400 text-sm">{t.assetsLoadError}</p>
-            <p className="text-text-muted text-xs mt-1">{assetsError.status === 403 ? t.assetsLoadHint403 : t.assetsLoadStatus(assetsError.status)}</p>
-          </div>
-        )}
-
-        {/* Photos Tab */}
-        {activeTab === 'photos' && (
-          <div className="flex flex-col" style={{ gap: `${GAP}px`, touchAction: 'pan-y pinch-zoom' }}>
-            {displayRows.map((row, ri) => {
-              const scale = Math.min(1, (windowWidth - 64) / GRID_WIDTH)
-              const rowH = Math.max(100, Math.round(row.height * scale))
-              return (
-              <div key={ri} className="flex" style={{ height: `${rowH}px`, gap: `${GAP}px` }}>
-                {row.cells.map(({ asset, flex }) => {
-                  const rank = getRankForAsset(asset.id)
-                  const assetStats = getStatsForAsset(asset.id)
-                  return (
-                    <div
-                      key={asset.id}
-                      className={`relative group overflow-hidden ${rank ? 'ring-2 ' + RANK_COLORS[rank as PickSlot].ring : ''}`}
-                      style={{ flex }}
-                    >
-                      <img
-                        src={`/api/proxy/thumbnail/${asset.id}?size=preview`}
-                        alt={asset.originalFileName}
-                        className="w-full h-full object-cover cursor-zoom-in transition-transform duration-500 group-hover:scale-105"
-                        loading="lazy"
-                        onClick={() => setLightbox(asset.id)}
-                      />
-                      {rank && (
-                        <div className={`absolute top-2 left-2 w-7 h-7 flex items-center justify-center text-xs z-10 ${RANK_COLORS[rank as PickSlot].badge}`}>
-                          {RANK_COLORS[rank as PickSlot].label}
-                        </div>
-                      )}
-                      {isPickable && (
-                        <div className="absolute bottom-0 left-0 right-0 flex justify-center gap-1 p-1.5 bg-black/60 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity z-10">
-                          {([1, 2, 3] as PickSlot[]).map(r => {
-                            const isActive = picks[r] === asset.id
-                            const isTaken = picks[r] !== null && picks[r] !== asset.id
-                            return (
-                              <button key={r} onClick={e => handleRankClick(asset.id, r, e)}
-                                className={`px-2 py-1 text-xs font-bold transition-all ${isActive ? RANK_COLORS[r].btn + ' ring-1 ring-white' : isTaken ? 'bg-white/10 text-white/30 cursor-not-allowed' : RANK_COLORS[r].btn}`}>
-                                {RANK_COLORS[r].label}
-                              </button>
-                            )
-                          })}
-                        </div>
-                      )}
-                      {(submitted || votingStatus.hasEnded) && assetStats && (
-                        <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1 p-3 pointer-events-none">
-                          {assetStats.rank1_count > 0 && <div className="text-yellow-400 text-sm font-medium">🥇 {assetStats.rank1_count}x</div>}
-                          {assetStats.rank2_count > 0 && <div className="text-gray-300 text-sm font-medium">🥈 {assetStats.rank2_count}x</div>}
-                          {assetStats.rank3_count > 0 && <div className="text-amber-600 text-sm font-medium">🥉 {assetStats.rank3_count}x</div>}
-                          <div className="text-white/60 text-xs mt-1">Score: {assetStats.score}</div>
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            )})}
-          </div>
-        )}
-
-        {/* Results Tab */}
-        {activeTab === 'results' && showResultsTab && (
-          <div>
-            {!stats || stats.stats.length === 0 ? (
-              <p className="text-text-muted text-center py-16">{t.noResults}</p>
-            ) : (
-              <>
-                <p className="text-text-muted text-sm mb-8">{t.totalVotes(stats.totalVotes)}</p>
-
-                {/* Top 3 – hero layout, full width each */}
-                <div className="flex flex-col gap-1 mb-10">
-                  {stats.stats.slice(0, 3).map((s, i) => (
-                    <div key={s.asset_id} className="flex gap-0" style={{ height: '420px' }}>
-                      {/* Image */}
-                      <div className="relative group flex-1 overflow-hidden cursor-zoom-in" onClick={() => setLightbox(s.asset_id)}>
-                        <img
-                          src={`/api/proxy/thumbnail/${s.asset_id}?size=preview`}
-                          alt=""
-                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                        />
-                        <div className="absolute top-3 left-3 text-3xl">{['🥇','🥈','🥉'][i]}</div>
-                      </div>
-                      {/* Stats sidebar */}
-                      <div className="w-48 flex-shrink-0 bg-surface-1 border-l border-surface-3 flex flex-col justify-center px-5 py-6 gap-3">
-                        <div>
-                          <p className="font-display text-2xl text-accent">{t.place(i + 1)}</p>
-                          <p className="text-text-muted text-xs mt-0.5">Score: {s.score}</p>
-                        </div>
-                        <div className="border-t border-surface-3 pt-3 space-y-2 text-sm">
-                          {s.rank1_count > 0 && (
-                            <div className="flex items-center justify-between">
-                              <span>🥇 Platz 1</span>
-                              <span className="text-text-secondary font-medium">{s.rank1_count}×</span>
-                            </div>
-                          )}
-                          {s.rank2_count > 0 && (
-                            <div className="flex items-center justify-between">
-                              <span>🥈 Platz 2</span>
-                              <span className="text-text-secondary font-medium">{s.rank2_count}×</span>
-                            </div>
-                          )}
-                          {s.rank3_count > 0 && (
-                            <div className="flex items-center justify-between">
-                              <span>🥉 Platz 3</span>
-                              <span className="text-text-secondary font-medium">{s.rank3_count}×</span>
-                            </div>
-                          )}
-                          <div className="flex items-center justify-between border-t border-surface-3 pt-2 text-text-muted text-xs">
-                            <span>Total Votes</span>
-                            <span>{s.rank1_count + s.rank2_count + s.rank3_count}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Platz 4+ – 3-Spalten Grid */}
-                {stats.stats.length > 3 && (
-                  <>
-                    <h3 className="font-display text-xl font-light mb-4 text-text-secondary">Weitere bewertete Fotos</h3>
-                    <div className="flex flex-col gap-1">
-                      {(() => {
-                        const rest = stats.stats.slice(3)
-                        const restRows: { asset: VoteStats; flex: number }[][] = []
-                        for (let ri = 0; ri < rest.length; ri += 3) {
-                          restRows.push(rest.slice(ri, ri + 3).map(s => ({ asset: s, flex: 1 })))
-                        }
-                        return restRows.map((row, ri) => (
-                          <div key={ri} className="flex gap-1" style={{ height: '280px' }}>
-                            {row.map(({ asset: s }, ci) => {
-                              const rank = stats.stats.findIndex(x => x.asset_id === s.asset_id) + 1
-                              return (
-                                <div key={s.asset_id} className="relative group flex-1 overflow-hidden cursor-zoom-in" onClick={() => setLightbox(s.asset_id)}>
-                                  <img
-                                    src={`/api/proxy/thumbnail/${s.asset_id}?size=preview`}
-                                    alt=""
-                                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                                  />
-                                  {/* Rank badge */}
-                                  <div className="absolute top-2 left-2 bg-black/70 text-white text-xs px-1.5 py-0.5">
-                                    #{rank}
-                                  </div>
-                                  {/* Hover stats */}
-                                  <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1 p-3 pointer-events-none">
-                                    {s.rank1_count > 0 && <div className="text-yellow-400 text-sm">🥇 {s.rank1_count}×</div>}
-                                    {s.rank2_count > 0 && <div className="text-gray-300 text-sm">🥈 {s.rank2_count}×</div>}
-                                    {s.rank3_count > 0 && <div className="text-amber-600 text-sm">🥉 {s.rank3_count}×</div>}
-                                    <div className="text-white/60 text-xs mt-1">Score: {s.score}</div>
-                                  </div>
-                                </div>
-                              )
-                            })}
-                            {/* Fill empty cells in last row */}
-                            {row.length < 3 && Array.from({ length: 3 - row.length }).map((_, ei) => (
-                              <div key={`empty-${ei}`} className="flex-1 bg-surface-1" />
-                            ))}
-                          </div>
-                        ))
-                      })()}
-                    </div>
-                  </>
-                )}
-              </>
-            )}
-          </div>
-        )}
-      </div>
-
-      {showBackToTop && (
-        <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-          className="fixed bottom-6 right-6 z-40 bg-surface-2 border border-surface-3 text-text-muted hover:text-accent hover:border-accent transition-colors px-3 py-2 text-xs">
-          {t.backToTop}
+          {onlyFav ? t.onlyFavs : t.favorites} · {favs.size}
         </button>
-      )}
+        {canRate && photos && photos.length > 0 && (
+          <button className="pill" onClick={() => setKompass(true)}>
+            {t.toKompass}
+          </button>
+        )}
+      </SiteHeader>
 
-      {lightbox && (
-        <div className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-4 cursor-zoom-out" style={{ touchAction: 'pan-y' }}
-          onClick={() => setLightbox(null)} onTouchStart={onLightboxTouchStart} onTouchEnd={onLightboxTouchEnd}>
-          <button className="absolute top-4 right-4 text-white/60 hover:text-white text-2xl z-10" onClick={() => setLightbox(null)}>✕</button>
-          {lightboxIds.length > 1 && (
-            <>
-              <button aria-label="Previous" className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 text-white/60 hover:text-white text-4xl px-3 py-4 z-10"
-                onClick={e => { e.stopPropagation(); navigateLightbox(-1) }}>‹</button>
-              <button aria-label="Next" className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 text-white/60 hover:text-white text-4xl px-3 py-4 z-10"
-                onClick={e => { e.stopPropagation(); navigateLightbox(1) }}>›</button>
-            </>
-          )}
-          <img
-            key={lightbox}
-            src={`/api/proxy/thumbnail/${lightbox}?size=preview`}
-            alt=""
-            className="max-w-full max-h-full object-contain cursor-zoom-out"
-            onClick={() => setLightbox(null)}
-          />
+      {(album?.description || (album && !album.open) || album?.lottery) && (
+        <div style={{ padding: '0 28px 14px', fontSize: 14, color: 'var(--muted)', display: 'flex', gap: '4px 20px', flexWrap: 'wrap' }}>
+          {album?.description && <span style={{ color: '#d5dbe6' }}>{album.description}</span>}
+          {album?.lottery && <span>{t.lotteryNote}</span>}
+          {album && !album.open && <span>{t.votingClosed}</span>}
         </div>
       )}
-    </div>
+
+      <main>
+        {error ? (
+          <div className="page">
+            <p>{t.assetsLoadError}</p>
+            <p style={{ color: 'var(--muted)', fontSize: 14 }}>{error.status === 403 ? t.assetsLoadHint403 : error.status ? t.assetsLoadStatus(error.status) : ''}</p>
+          </div>
+        ) : !photos ? (
+          <div className="albums" aria-busy="true" aria-label={t.loading}>
+            {[...Array(9)].map((_, i) => (
+              <div key={i} className="album-card shimmer" />
+            ))}
+          </div>
+        ) : shown.length === 0 && onlyFav ? (
+          <div className="page">
+            <p>{t.noFavsHere}</p>
+          </div>
+        ) : (
+          <Wall photos={shown} levels={levels} mine={mine} favs={favs} canRate={canRate} onRate={rate} onFav={toggleFav} onFocus={setFocusId} />
+        )}
+      </main>
+      <SiteFooter />
+
+      {hint && canRate && photos && photos.length > 0 && !kompass && focusIndex < 0 && (
+        <div className="glass glass-dk hintbar">
+          <span>
+            <b>{t.hintTap}</b> {EMOJI[1]} {t.names[1]}
+          </span>
+          <span>
+            <b>{t.hintHold}</b> {EMOJI[2]} {t.names[2]} {EMOJI[3]} {t.names[3]} {EMOJI[4]} {t.names[4]}
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <b>{t.hintHeart}</b> <Heart on={false} size={16} /> {t.hintFav}
+          </span>
+          <button className="pill pill-light" onClick={() => setKompass(true)}>
+            {t.toKompass} →
+          </button>
+          <button
+            className="x"
+            aria-label={t.hintDismiss}
+            onClick={() => {
+              setHint(false)
+              try {
+                localStorage.setItem('hint-off', '1')
+              } catch {}
+            }}
+          >
+            <IconClose size={16} />
+          </button>
+        </div>
+      )}
+
+      {focusIndex >= 0 && (
+        <Focus
+          photos={shown}
+          index={focusIndex}
+          setIndex={(i) => setFocusId(shown[i].id)}
+          onClose={() => setFocusId(null)}
+          mine={mine}
+          favs={favs}
+          all={all}
+          canRate={canRate}
+          onRate={rate}
+          onFav={toggleFav}
+        />
+      )}
+
+      {kompass && photos && (
+        <Kompass title={album?.title || ''} photos={photos} mine={mine} favs={favs} onRate={rate} onFav={toggleFav} onClose={() => setKompass(false)} />
+      )}
+
+      {toast && (
+        <div className="glass glass-dk toast" role="status">
+          {toast}
+        </div>
+      )}
+    </>
   )
 }
-
-

@@ -2,85 +2,77 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Album, getVotingStatus } from '@/types'
-import { useLang, LangToggle } from '@/lib/LanguageContext'
-import { Logo } from '@/components/Logo'
+import { useLang } from '@/lib/LanguageContext'
+import { imgUrl } from '@/lib/photo'
+import { SiteFooter, SiteHeader } from '@/components/ui'
 
-interface AlbumWithStats extends Album {
-  vote_count?: number
+interface AlbumRow {
+  id: number
+  title: string
+  description: string | null
+  asset_count: number
+  cover_asset_id: string | null
+  lottery_enabled: number
+  lottery_drawn: number
+  rating_count: number
+  is_fresh: number
 }
 
 export default function HomePage() {
-  const [albums, setAlbums] = useState<AlbumWithStats[]>([])
-  const [loading, setLoading] = useState(true)
+  const [albums, setAlbums] = useState<AlbumRow[] | null>(null)
   const { t } = useLang()
 
   useEffect(() => {
-    fetch('/api/albums')
-      .then(r => r.json())
-      .then(data => { setAlbums(data); setLoading(false) })
-      .catch(() => setLoading(false))
+    fetch('/api/albums', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((data) => setAlbums(Array.isArray(data) ? data : []))
+      .catch(() => setAlbums([]))
   }, [])
 
   return (
-    <div className="grain min-h-screen">
-      <header className="border-b border-surface-3 px-8 py-6 flex items-center justify-between">
-        <Logo size="large" />
-        <LangToggle />
-      </header>
-
-      <main className="px-8 py-12 max-w-7xl mx-auto">
-        {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[...Array(6)].map((_, i) => <div key={i} className="aspect-[4/3] shimmer" />)}
+    <>
+      <SiteHeader />
+      <main>
+        <h1 className="display" style={{ fontSize: 'clamp(44px, 8vw, 96px)', lineHeight: 0.95, margin: '18px 28px 26px', color: 'var(--fresh)' }}>
+          {t.albums}
+        </h1>
+        {albums === null ? (
+          <div className="albums" aria-busy="true" aria-label={t.loading}>
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className={`album-card shimmer${i === 0 ? ' big' : ''}`} />
+            ))}
           </div>
         ) : albums.length === 0 ? (
-          <div className="text-center py-32 text-text-muted">
-            <p className="font-display text-4xl font-light mb-3">{t.noAlbums}</p>
-          </div>
+          <p style={{ margin: '0 28px', color: 'var(--muted)' }}>{t.noAlbums}</p>
         ) : (
-          <>
-            <div className="mb-10">
-              <h2 className="font-display text-5xl font-light text-text-primary">Alben</h2>
-              <div className="w-12 h-px bg-accent mt-3" />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-1">
-              {albums.map((album, i) => <AlbumCard key={album.id} album={album} index={i} />)}
-            </div>
-          </>
+          <div className="albums">
+            {albums.map((album, i) => (
+              <Link key={album.id} href={`/album/${album.id}`} className={`album-card${i === 0 ? ' big' : ''}`}>
+                {album.cover_asset_id && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={imgUrl(album.cover_asset_id, 'preview')} alt="" loading={i < 3 ? 'eager' : 'lazy'} />
+                )}
+                <span className="shade" />
+                <span className="chips">
+                  {!!album.is_fresh && <span className="glass chip">{t.fresh}</span>}
+                  {!!album.lottery_enabled && !album.lottery_drawn && <span className="glass chip">{t.lottery}</span>}
+                </span>
+                <span className="meta">
+                  <span className="display" style={{ display: 'block', fontSize: i === 0 ? 'clamp(30px, 4.4vw, 60px)' : 'clamp(24px, 2.4vw, 34px)', lineHeight: 1.05 }}>
+                    {album.title}
+                  </span>
+                  <span style={{ display: 'block', marginTop: 6, fontSize: 14, color: '#d5dbe6' }}>
+                    {t.photos(album.asset_count)}
+                    {album.rating_count > 0 ? ` · ${t.votes(album.rating_count)}` : ''}
+                    {album.description ? ` · ${album.description}` : ''}
+                  </span>
+                </span>
+              </Link>
+            ))}
+          </div>
         )}
       </main>
-    </div>
-  )
-}
-
-function AlbumCard({ album, index }: { album: AlbumWithStats; index: number }) {
-  const status = getVotingStatus(album)
-  const { t } = useLang()
-  const thumbUrl = album.cover_asset_id ? `/api/proxy/thumbnail/${album.cover_asset_id}?size=preview` : null
-
-  return (
-    <Link href={`/album/${album.id}`} className="group relative block overflow-hidden bg-surface-1 hover:z-10" style={{ animationDelay: `${index * 80}ms` }}>
-      <div className="aspect-[4/3] overflow-hidden bg-surface-2">
-        {thumbUrl ? (
-          <img src={thumbUrl} alt={album.title} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center"><span className="text-text-muted text-4xl">◻</span></div>
-        )}
-      </div>
-      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-      <div className="absolute bottom-0 left-0 right-0 p-5 translate-y-2 group-hover:translate-y-0 transition-transform duration-300 opacity-0 group-hover:opacity-100">
-        <p className="font-display text-xl text-white font-light">{album.title}</p>
-        <p className="text-white/60 text-xs mt-1">{t.photos(album.asset_count)}</p>
-      </div>
-      <div className="p-4 group-hover:opacity-0 transition-opacity duration-200">
-        <p className="font-display text-lg text-text-primary">{album.title}</p>
-        <div className="flex items-center gap-3 mt-1">
-          <span className="text-text-muted text-xs">{t.photos(album.asset_count)}</span>
-          {status.isOpen && <span className="text-xs bg-accent/20 text-accent px-2 py-0.5 border border-accent/30">{t.votingOpen}</span>}
-          {status.hasEnded && album.voting_enabled && <span className="text-xs text-text-muted">{t.votingClosedLabel}</span>}
-        </div>
-      </div>
-    </Link>
+      <SiteFooter />
+    </>
   )
 }

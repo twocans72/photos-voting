@@ -25,9 +25,14 @@ services:
       
       # Datenbank
       DATABASE_PATH: /data/voting.db
-      
 
-      
+      # E-Mail: Anmelde-Links und Benachrichtigungen
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      SMTP_FROM: ${SMTP_FROM}
+
     networks:
       - immich_default  # Gleiches Netzwerk wie Immich für internen Zugriff
 
