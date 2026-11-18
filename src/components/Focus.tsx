@@ -89,7 +89,7 @@ export function Focus({ photos, index, setIndex, onClose, mine, favs, all, canRa
             </button>
           ))}
         <button className="glass fround" aria-label={fav ? t.favRemove : t.favAdd} aria-pressed={fav} onClick={() => onFav(photo.id)}>
-          <Heart on={fav} />
+          <Heart on={fav} size={20} />
         </button>
         <button className="glass fround" aria-label={t.next} onClick={() => go(1)}>
           <IconNext />

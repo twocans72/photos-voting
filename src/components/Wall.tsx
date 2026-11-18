@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useLayoutEffect, useRef, useState, PointerEvent } from 'react'
-import { EMOJI, imgUrl, Photo } from '@/lib/photo'
+import { EMOJI, exifLine, imgUrl, Photo } from '@/lib/photo'
 import { useLang } from '@/lib/LanguageContext'
 import { Heart, IconExpand } from './ui'
 
@@ -51,6 +51,46 @@ function span(n: number, level: number, ratio: number): [number, number] {
   }
   if (ratio < 0.9) return size === 1 ? [1, 2] : [2, 3]
   return [size, size]
+}
+
+/**
+ * Helligkeit der Bildecke oben links, dort wo die Aufnahmedaten stehen. Setzt
+ * `data-tone` auf der Kachel: 'light' = helle Ecke → dunkle Schrift, sonst helle Schrift.
+ * Einmal pro Kachel und Bildgrösse, erst beim Überfahren.
+ */
+function setTone(tile: HTMLElement) {
+  const img = tile.querySelector('img')
+  if (!img || !img.complete || !img.naturalWidth) return
+  const key = `${img.currentSrc}|${tile.className.includes('lv1')}`
+  if (tile.dataset.toneFor === key) return
+  tile.dataset.toneFor = key
+  let tone = 'dark'
+  // «Nicht meins» ist geschrumpft: in der Ecke liegt der dunkle Grund, nicht das Bild
+  if (!tile.className.includes('lv1')) {
+    try {
+      const box = tile.getBoundingClientRect()
+      const nw = img.naturalWidth
+      const nh = img.naturalHeight
+      // sichtbarer Ausschnitt bei object-fit: cover
+      const scale = Math.max(box.width / nw, box.height / nh)
+      const sx = (nw - box.width / scale) / 2
+      const sy = (nh - box.height / scale) / 2
+      const sw = (Math.min(box.width - 60, 420) / scale) | 0
+      const sh = (Math.min(box.height, 54) / scale) | 0
+      const c = document.createElement('canvas')
+      c.width = 16
+      c.height = 4
+      const ctx = c.getContext('2d', { willReadFrequently: true })
+      if (ctx && sw > 0 && sh > 0) {
+        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, 16, 4)
+        const d = ctx.getImageData(0, 0, 16, 4).data
+        let sum = 0
+        for (let i = 0; i < d.length; i += 4) sum += 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]
+        if (sum / (d.length / 4) > 150) tone = 'light'
+      }
+    } catch {}
+  }
+  tile.dataset.tone = tone
 }
 
 function holdLevel(ms: number): number {
@@ -114,7 +154,8 @@ export function Wall({ photos, levels, mine, favs, canRate, onRate, onFav, onFoc
     // Stufe sonst weiterspringen, und man bekäme etwas anderes als angezeigt.
     const hl = shownHl.current >= 0 ? shownHl.current : holdLevel(Date.now() - p.t)
     stop()
-    const value = hl < 0 ? (mine[id] === 1 ? 0 : 1) : 2 + hl
+    // Kurzes Tippen: unbewertet → «Nicht meins», bewertet (egal wie) → Bewertung weg
+    const value = hl < 0 ? (mine[id] ? 0 : 1) : 2 + hl
     anchor.current = { id, top: e.currentTarget.getBoundingClientRect().top }
     setPopId(id)
     setTimeout(() => setPopId((cur) => (cur === id ? null : cur)), 500)
@@ -131,12 +172,14 @@ export function Wall({ photos, levels, mine, favs, canRate, onRate, onFav, onFoc
           const holding = hold && hold.id === p.id && hold.hl >= 0 ? hold.hl : -1
           const big = (cols / n) * width > 300
           const fav = favs.has(p.id)
+          const exif = exifLine(p)
           return (
             <div
               key={p.id}
               data-id={p.id}
               className={`tile lv${level}${popId === p.id ? ' pop' : ''}${canRate ? '' : ' locked'}`}
               style={{ gridColumn: `span ${cols}`, gridRow: `span ${rows}` }}
+              onPointerEnter={exif ? (e) => e.pointerType === 'mouse' && setTone(e.currentTarget) : undefined}
             >
               <button
                 className="hit"
@@ -170,6 +213,7 @@ export function Wall({ photos, levels, mine, favs, canRate, onRate, onFav, onFoc
                   </span>
                 )}
               </button>
+              {exif && holding < 0 && <span className="exif">{exif}</span>}
               {my > 0 && holding < 0 && (
                 <span className="glass badge" aria-hidden="true">
                   {EMOJI[my]}

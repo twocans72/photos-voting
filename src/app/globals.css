@@ -590,6 +590,35 @@
     opacity: 1;
   }
 }
+/* Aufnahmedaten: nur mit Maus, beim Überfahren oben links. Reine Schrift;
+   hell oder dunkel je nach Bildecke (data-tone setzt Wall.tsx beim Überfahren). */
+.tile .exif {
+  position: absolute;
+  left: 10px;
+  top: 9px;
+  max-width: calc(100% - 72px);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: left;
+  color: #fff;
+  text-shadow: 0 0 6px rgba(0, 0, 0, 0.55), 0 1px 2px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 0.2s, transform 0.2s;
+}
+.tile[data-tone='light'] .exif {
+  color: #14101f;
+  text-shadow: 0 0 6px rgba(255, 255, 255, 0.6), 0 1px 2px rgba(255, 255, 255, 0.5);
+}
+@media (hover: hover) {
+  .tile:hover .exif {
+    opacity: 1;
+    transform: none;
+    transition-delay: 0.25s;
+  }
+}
 .tile .badge {
   position: absolute;
   left: 6px;
@@ -740,7 +769,7 @@
 .focus .photo {
   position: relative;
   max-width: min(100%, 1700px);
-  max-height: calc(100dvh - 170px);
+  max-height: calc(100dvh - 140px);
   width: auto;
   height: auto;
   object-fit: contain;
@@ -766,38 +795,39 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 .fbtn {
-  min-height: 48px;
-  padding: 0 18px 0 14px;
-  border-radius: 24px;
+  min-height: 38px;
+  padding: 0 13px 0 10px;
+  border-radius: 19px;
   font: inherit;
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   cursor: pointer;
 }
 .fbtn .e {
-  font-size: 20px;
+  font-size: 16px;
   line-height: 1;
 }
 .fbtn.on {
   background: var(--fresh);
   border: 1px solid var(--fresh);
   color: var(--on-fresh);
+  font-weight: 600;
   box-shadow: none;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
 .fround {
-  width: 48px;
-  height: 48px;
+  width: 38px;
+  height: 38px;
   padding: 0;
-  border-radius: 24px;
+  border-radius: 19px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -816,17 +846,34 @@
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
 }
 @media (max-width: 640px) {
+  /* Am Handy nur Emojis, dafür mit fingertauglichen 40 px; alles in einer Zeile */
+  .focus .bar {
+    gap: 4px;
+    flex-wrap: nowrap;
+  }
+  .fbtn,
+  .fround {
+    min-height: 40px;
+    height: 40px;
+    border-radius: 20px;
+  }
+  .fround {
+    width: 40px;
+    flex-shrink: 0;
+  }
   .fbtn {
-    padding: 0 12px;
+    padding: 0 8px;
+    min-width: 40px;
+    justify-content: center;
   }
   .fbtn .l {
     display: none;
   }
   .fbtn .e {
-    font-size: 24px;
+    font-size: 20px;
   }
   .focus .photo {
-    max-height: calc(100dvh - 200px);
+    max-height: calc(100dvh - 150px);
   }
 }
 
