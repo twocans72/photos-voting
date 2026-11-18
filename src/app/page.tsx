@@ -12,8 +12,7 @@ interface AlbumRow {
   description: string | null
   asset_count: number
   cover_asset_id: string | null
-  lottery_enabled: number
-  lottery_drawn: number
+  lottery_public: boolean
   rating_count: number
   is_fresh: number
 }
@@ -55,7 +54,7 @@ export default function HomePage() {
                 <span className="shade" />
                 <span className="chips">
                   {!!album.is_fresh && <span className="glass chip">{t.fresh}</span>}
-                  {!!album.lottery_enabled && !album.lottery_drawn && <span className="glass chip">{t.lottery}</span>}
+                  {album.lottery_public && <span className="glass chip">{t.lottery}</span>}
                 </span>
                 <span className="meta">
                   <span className="display" style={{ display: 'block', fontSize: i === 0 ? 'clamp(30px, 4.4vw, 60px)' : 'clamp(24px, 2.4vw, 34px)', lineHeight: 1.05 }}>

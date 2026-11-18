@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminFromRequest } from '@/lib/auth'
 import { getDb } from '@/lib/db'
+import { isDate } from '@/lib/lottery'
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   if (!getAdminFromRequest()) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -21,9 +22,12 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     }
   }
   if (body.voting_enabled !== undefined) { fields.push('voting_enabled = ?'); values.push(body.voting_enabled ? 1 : 0) }
-  if (body.voting_start !== undefined) { fields.push('voting_start = ?'); values.push(body.voting_start || null) }
-  if (body.voting_end !== undefined) { fields.push('voting_end = ?'); values.push(body.voting_end || null) }
   if (body.lottery_enabled !== undefined) { fields.push('lottery_enabled = ?'); values.push(body.lottery_enabled ? 1 : 0) }
+  if (body.lottery_end !== undefined) {
+    if (body.lottery_end && !isDate(body.lottery_end)) return NextResponse.json({ error: 'Ungültiges Datum' }, { status: 400 })
+    fields.push('lottery_end = ?')
+    values.push(body.lottery_end || null)
+  }
   if (fields.length === 0) return NextResponse.json({ error: 'No fields' }, { status: 400 })
   fields.push('updated_at = CURRENT_TIMESTAMP')
   values.push(params.id)

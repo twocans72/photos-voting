@@ -4,9 +4,11 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { getAdminFromRequest } from '@/lib/auth'
 import { getDb } from '@/lib/db'
+import { extendLotteries } from '@/lib/lottery'
 
 export async function GET() {
   if (!getAdminFromRequest()) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  extendLotteries()
   const albums = getDb()
     .prepare(
       `SELECT a.*,

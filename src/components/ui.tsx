@@ -27,7 +27,9 @@ function Stroke({ d, size = 20 }: { d: string; size?: number }) {
 export const IconExpand = ({ size = 18 }: { size?: number }) => <Stroke size={size} d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
 export const IconPrev = () => <Stroke d="M15 5l-7 7 7 7" />
 export const IconNext = () => <Stroke d="M9 5l7 7-7 7" />
-export const IconCompass = ({ size = 20 }: { size?: number }) => <Stroke size={size} d="M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18zM15.5 8.5l-2 5-5 2 2-5z" />
+/** Vier Pfeile: die Schnellbewertung, in der jede Richtung eine Stufe ist. */
+export const IconArrows = ({ size = 20 }: { size?: number }) => <Stroke size={size} d="M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3" />
+export const IconFilter = ({ size = 20 }: { size?: number }) => <Stroke size={size} d="M4 5h16l-6 7.5V18l-4 2v-7.5z" />
 export const IconUser = ({ size = 20 }: { size?: number }) => <Stroke size={size} d="M12 12a4 4 0 1 0 0-8a4 4 0 0 0 0 8zM4.5 20a7.5 7.5 0 0 1 15 0" />
 export const IconClose = ({ size = 20 }: { size?: number }) => <Stroke size={size} d="M5 5l14 14M19 5L5 19" />
 

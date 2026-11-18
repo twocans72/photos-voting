@@ -186,6 +186,12 @@ if (!hasColumn('albums', 'visible_at')) {
   console.log('✅ Migrated albums: added visible_at column')
 }
 
+// lottery_end: letzter Tag der Verlosung (JJJJ-MM-TT) oder NULL für «ohne Datum».
+if (!hasColumn('albums', 'lottery_end')) {
+  db.exec(`ALTER TABLE albums ADD COLUMN lottery_end TEXT`)
+  console.log('✅ Migrated albums: added lottery_end column')
+}
+
 // Einmalig beim Umbau: Das Bewerten ist neu in jedem Album offen. Die alten
 // Zeitfenster gehörten zum Top-3-Wettbewerb und würden das neue Voting sperren.
 if (!db.prepare(`SELECT value FROM settings WHERE key = 'ratings_v1'`).get()) {

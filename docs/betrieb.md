@@ -42,7 +42,7 @@ Neu ist ein Album, das sichtbar geschaltet wurde und noch nie angekündigt war (
 - Beim Anmelden wandern die anonymen Stimmen des Geräts ins Konto.
 - Favoriten: `favorites`, nur mit Konto. Ein Herz auf einem unbewerteten Bild setzt «Love it».
 - Anmeldung ohne Passwort: `login_tokens` (Einmal-Link, 30 Minuten), Sitzung in `user_sessions` (Cookie `sid`, 180 Tage).
-- Verlosung: teilnahmeberechtigt ist, wer angemeldet mindestens ein Bild des Albums bewertet hat.
+- Verlosung: teilnahmeberechtigt ist, wer angemeldet mindestens ein Bild des Albums bewertet hat. Alle Stimmen zählen, egal von wann. Öffentlich sichtbar und ziehbar ist sie erst ab 5 Teilnehmern. Optionales Enddatum (`albums.lottery_end`, der Tag zählt noch dazu); ist es vorbei und es sind weniger als 5, verlängert der Hintergrund-Job um je einen Monat. Logik: `src/lib/lottery.ts`.
 - Die alten Top-3-Stimmen (`votes`, `lottery_participants`) bleiben in der Datenbank, werden aber nicht mehr angezeigt.
 
 ## Lokal entwickeln

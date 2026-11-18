@@ -1,4 +1,5 @@
 import { getDb } from './db'
+import { extendLotteries } from './lottery'
 import { getAlbums, getAlbumAssets } from './immich'
 import { digestMail, DigestItem, mailConfigured, sendMail } from './mail'
 
@@ -155,6 +156,11 @@ export async function runTick(): Promise<{ albums: number; digest: string } | { 
   if (running) return { skipped: true }
   running = true
   try {
+    try {
+      extendLotteries()
+    } catch (err) {
+      console.error('[lottery] Verlängern fehlgeschlagen:', err)
+    }
     const albums = await syncAlbums()
     await syncVisibleAssets()
     const digest = await maybeSendDigest()

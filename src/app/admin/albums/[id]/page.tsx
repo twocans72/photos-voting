@@ -28,11 +28,14 @@ interface AlbumDetail {
   title: string
   lottery_enabled: number
   lottery_drawn: number
+  lottery_end: string | null
   lottery_winner_id: string | null
   vote_count: number
   lottery_count: number
   voter_count: number
 }
+
+const LOTTERY_MIN = 5 // wie in src/lib/lottery.ts
 
 const LABELS = ['🤷 Nicht meins', '👍 OK', '🤜🤛 Gutes Foto', '😍 Love it']
 
@@ -142,7 +145,7 @@ export default function AdminAlbumDetailPage() {
             <button onClick={exportCSV} className="btn-secondary text-xs py-1.5 px-4">
               CSV Export
             </button>
-            {!!album.lottery_enabled && !album.lottery_drawn && participants.length > 0 && (
+            {!!album.lottery_enabled && !album.lottery_drawn && participants.length >= LOTTERY_MIN && (!album.lottery_end || new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Zurich' }) > album.lottery_end) && (
               <button onClick={handleDrawLottery} disabled={drawing} className="btn-primary text-xs py-1.5 px-4 disabled:opacity-50">
                 {drawing ? '…' : '🎲 Gewinner ziehen'}
               </button>
@@ -178,7 +181,10 @@ export default function AdminAlbumDetailPage() {
 
         {tab === 'lottery' && (
           <div className="space-y-1">
-            <p className="text-text-muted text-sm pb-3">Teilnahmeberechtigt ist, wer angemeldet mindestens ein Bild dieses Albums bewertet hat.</p>
+            <p className="text-text-muted text-sm pb-3">
+              Teilnahmeberechtigt ist, wer angemeldet mindestens ein Bild dieses Albums bewertet hat; alle Stimmen zählen, egal von wann. Öffentlich angezeigt und gezogen wird erst ab {LOTTERY_MIN} Teilnehmern.
+              {album.lottery_end ? ` Läuft bis ${new Date(album.lottery_end + 'T12:00:00').toLocaleDateString('de-CH')}; sind es dann weniger als ${LOTTERY_MIN}, verlängert sie sich automatisch um einen Monat.` : ' Kein Enddatum gesetzt.'}
+            </p>
             {participants.length === 0 ? (
               <p className="text-text-muted py-8 text-center">Noch keine Teilnehmer</p>
             ) : (

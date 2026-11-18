@@ -11,6 +11,7 @@ export interface Album {
   voting_end: string | null
   lottery_enabled: number
   lottery_drawn: number
+  lottery_end?: string | null
   lottery_winner_id: string | null
   created_at: string
   updated_at: string

@@ -273,6 +273,48 @@
 .topbar .acct svg {
   display: none;
 }
+/* Filterleiste: Herz und die vier Stufen, je mit Anzahl; gedrückt = Filter aktiv */
+.filters {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  overflow: hidden;
+}
+.filters button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 0;
+  border-left: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.filters button:first-child {
+  border-left: 0;
+  padding-left: 13px;
+}
+.filters button:last-child {
+  padding-right: 13px;
+}
+.filters button:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+.filters button[aria-pressed='true'] {
+  background: var(--ink);
+  color: var(--on-fresh);
+  font-weight: 600;
+}
+.filters .e {
+  font-size: 16px;
+  line-height: 1;
+}
 /* Kurzanleitung in der Leiste: leise, nur wo Platz ist */
 .legend {
   display: none;
@@ -321,9 +363,39 @@
   font-weight: 600;
 }
 
-@media (max-width: 1099px) {
-  .topbar .txt.wide {
+@media (max-width: 1279px) {
+  .topbar .txt.wide,
+  .topbar.has-tools .bar-title {
     display: none;
+  }
+}
+/* Schmal: die Filterleiste bekommt eine eigene zweite Zeile in der Leiste */
+@media (max-width: 900px) {
+  .topbar.has-tools {
+    height: auto;
+    min-height: var(--bar);
+    align-items: flex-start;
+    padding-top: 10px;
+    padding-bottom: 8px;
+  }
+  .topbar.has-tools .site-nav {
+    flex: 1;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    row-gap: 8px;
+  }
+  .topbar.has-tools .filters {
+    order: 10;
+    flex: 1 0 100%;
+  }
+  .topbar.has-tools .filters button {
+    flex: 1;
+  }
+  .topbar.has-tools + .topbar-space {
+    height: 110px;
+  }
+  .topbar.has-tools ~ .howto {
+    top: 118px;
   }
 }
 @media (max-width: 900px) {
@@ -375,7 +447,30 @@
     display: inline;
   }
   .topbar .seg button {
-    padding: 0 11px;
+    padding: 0 8px;
+    min-height: 34px;
+  }
+  /* Albumseite am Handy: sechs Knöpfe müssen neben das Kamera-Zeichen passen */
+  .topbar.has-tools .site-nav {
+    gap: 4px;
+  }
+  .topbar.has-tools .pill {
+    min-height: 36px;
+    padding: 0 9px;
+  }
+  .topbar.has-tools .pill.icon,
+  .topbar.has-tools .acct {
+    width: 36px;
+    padding: 0;
+  }
+  .topbar.has-tools .logo-mark {
+    height: 32px;
+  }
+  .topbar.has-tools + .topbar-space {
+    height: 98px;
+  }
+  .topbar.has-tools ~ .howto {
+    top: 106px;
   }
 }
 

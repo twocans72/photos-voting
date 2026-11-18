@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { communityLevels, EMOJI, Photo, Stats } from '@/lib/photo'
 import { useLang } from '@/lib/LanguageContext'
 import { useSession } from '@/lib/SessionContext'
-import { Heart, IconClose, IconCompass, SiteFooter, SiteHeader } from '@/components/ui'
+import { Heart, IconArrows, IconClose, SiteFooter, SiteHeader } from '@/components/ui'
 import { Wall } from '@/components/Wall'
 import { Focus } from '@/components/Focus'
 import { Kompass } from '@/components/Kompass'
@@ -17,6 +17,7 @@ interface AlbumInfo {
   description: string | null
   asset_count: number
   lottery: boolean
+  lotteryUntil?: string | null
   open: boolean
 }
 
@@ -24,7 +25,7 @@ type Mode = 'mine' | 'all'
 
 export default function AlbumPage() {
   const id = useParams().id as string
-  const { t } = useLang()
+  const { t, lang } = useLang()
   const { user, ready, openLogin } = useSession()
 
   const [album, setAlbum] = useState<AlbumInfo | null>(null)
@@ -35,6 +36,7 @@ export default function AlbumPage() {
   const [error, setError] = useState<null | { notFound?: boolean; status?: number }>(null)
   const [mode, setMode] = useState<Mode>('mine')
   const [onlyFav, setOnlyFav] = useState(false)
+  const [picked, setPicked] = useState<number[]>([]) // Filter nach Stufe (1–4); leer = alle
   const [focusId, setFocusId] = useState<string | null>(null)
   const [kompass, setKompass] = useState(false)
   const [hint, setHint] = useState(false)
@@ -192,7 +194,17 @@ export default function AlbumPage() {
   }
 
   const levels = useMemo(() => (mode === 'mine' || !photos ? mine : communityLevels(photos, all)), [mode, mine, photos, all])
-  const shown = useMemo(() => (photos ? (onlyFav ? photos.filter((p) => favs.has(p.id)) : photos) : []), [photos, onlyFav, favs])
+  // Herz UND Stufe; mehrere gewählte Stufen ergänzen sich (ein Foto hat nur eine)
+  const shown = useMemo(
+    () => (photos || []).filter((p) => (!onlyFav || favs.has(p.id)) && (picked.length === 0 || picked.includes(levels[p.id] || 0))),
+    [photos, onlyFav, favs, picked, levels]
+  )
+  // Wie viele Fotos je Stufe (in der gerade gewählten Wand), für die Filterleiste
+  const perLevel = useMemo(() => {
+    const n = [0, 0, 0, 0, 0]
+    for (const p of photos || []) n[levels[p.id] || 0]++
+    return n
+  }, [photos, levels])
   const total = useMemo(() => Object.values(all).reduce((s, c) => s + c[0] + c[1] + c[2] + c[3], 0), [all])
   const focusIndex = focusId ? shown.findIndex((p) => p.id === focusId) : -1
   const canRate = !!album?.open
@@ -219,7 +231,12 @@ export default function AlbumPage() {
             <span className="legend" aria-hidden="true">
               {t.hintTap} <span className="e">{EMOJI[1]}</span> <i>·</i> {t.hintHold} <span className="e">{EMOJI[2]} {EMOJI[3]} {EMOJI[4]}</span>
             </span>
-            <button className="pill icon help" aria-label={t.howToRate} aria-expanded={hint} onClick={() => (hint ? closeHint() : setHint(true))}>
+            <button
+              className="pill icon help"
+              aria-label={t.howToRate}
+              aria-expanded={hint}
+              onClick={() => (hint ? closeHint() : setHint(true))}
+            >
               ?
             </button>
           </>
@@ -234,28 +251,38 @@ export default function AlbumPage() {
             <span className="short">{t.wallMineShort}</span>
           </button>
         </span>
-        <button
-          className={`pill${onlyFav ? ' pill-red' : ''}`}
-          aria-pressed={onlyFav}
-          aria-label={`${onlyFav ? t.onlyFavs : t.favorites}: ${favs.size}`}
-          onClick={() => {
-            if (!user) openLogin('fav')
-            else setOnlyFav(!onlyFav)
-          }}
-        >
-          {onlyFav ? (
-            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="#fff">
-              <path d="M12 20.5s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.6a4.3 4.3 0 0 1 7.5 2.7c0 5.6-7.5 10.2-7.5 10.2z" />
-            </svg>
-          ) : (
-            <Heart on={favs.size > 0} size={16} />
-          )}
-          <span className="txt wide">{onlyFav ? t.onlyFavs : t.favorites} ·</span> {favs.size}
-        </button>
+        <span className="filters" role="group" aria-label={t.filter}>
+          <button
+            aria-pressed={onlyFav}
+            aria-label={`${t.favorites}: ${favs.size}`}
+            title={t.favorites}
+            onClick={() => {
+              if (!user) openLogin('fav')
+              else setOnlyFav((on) => !on)
+            }}
+          >
+            <Heart on={onlyFav || favs.size > 0} size={16} />
+            <span className="n">{favs.size}</span>
+          </button>
+          {[1, 2, 3, 4].map((v) => (
+            <button
+              key={v}
+              aria-pressed={picked.includes(v)}
+              aria-label={`${t.names[v]}: ${perLevel[v]}`}
+              title={t.names[v]}
+              onClick={() => setPicked((cur) => (cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v]))}
+            >
+              <span className="e" aria-hidden="true">
+                {EMOJI[v]}
+              </span>
+              <span className="n">{perLevel[v]}</span>
+            </button>
+          ))}
+        </span>
         {canRate && photos && photos.length > 0 && (
           <button className="pill" aria-label={t.toKompass} title={t.toKompass} onClick={() => setKompass(true)}>
-            <IconCompass size={18} />
-            <span className="txt">{t.kompassShort}</span>
+            <IconArrows size={18} />
+            <span className="txt wide">{t.kompassShort}</span>
           </button>
         )}
       </SiteHeader>
@@ -272,7 +299,13 @@ export default function AlbumPage() {
             </span>
           )}
           {album?.description && <span style={{ color: '#d5dbe6' }}>{album.description}</span>}
-          {album?.lottery && <span>{t.lotteryNote}</span>}
+          {album?.lottery && (
+            <span>
+              {album.lotteryUntil
+                ? t.lotteryNoteUntil(new Date(album.lotteryUntil + 'T12:00:00').toLocaleDateString(lang === 'de' ? 'de-CH' : 'en-GB', { day: 'numeric', month: 'long', year: 'numeric' }))
+                : t.lotteryNote}
+            </span>
+          )}
           {album && !album.open && <span>{t.votingClosed}</span>}
         </div>
       </div>
@@ -289,9 +322,9 @@ export default function AlbumPage() {
               <div key={i} className="album-card shimmer" />
             ))}
           </div>
-        ) : shown.length === 0 && onlyFav ? (
+        ) : shown.length === 0 && (onlyFav || picked.length > 0) ? (
           <div className="page">
-            <p>{t.noFavsHere}</p>
+            <p>{picked.length > 0 ? t.noneMatch : t.noFavsHere}</p>
           </div>
         ) : (
           <Wall photos={shown} levels={levels} mine={mine} favs={favs} canRate={canRate} onRate={rate} onFav={toggleFav} onFocus={setFocusId} />

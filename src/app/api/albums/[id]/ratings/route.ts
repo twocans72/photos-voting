@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
 import { cookieOptions, COOKIE_NAMES, getUser, getVisitor, ipHash, randomToken } from '@/lib/users'
 import { getVotingStatus } from '@/types'
+import { publicLottery } from '@/lib/lottery'
 import type { Album } from '@/types'
 
 function loadAlbum(id: string): Album | undefined {
@@ -47,13 +48,15 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     ? (db.prepare('SELECT asset_id FROM favorites WHERE album_id = ? AND user_id = ?').all(album.id, user.id) as { asset_id: string }[]).map((r) => r.asset_id)
     : []
 
+  const lottery = publicLottery(album)
   return NextResponse.json({
     album: {
       id: album.id,
       title: album.title,
       description: album.description,
       asset_count: album.asset_count,
-      lottery: !!album.lottery_enabled && !album.lottery_drawn,
+      lottery: !!lottery,
+      lotteryUntil: lottery ? lottery.until : null,
       open: getVotingStatus(album).isOpen,
     },
     mine,

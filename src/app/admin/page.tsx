@@ -3,7 +3,10 @@
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Album, getVotingStatus } from '@/types'
+import { Album } from '@/types'
+
+// Muss zu LOTTERY_MIN in src/lib/lottery.ts passen (dort serverseitig massgebend)
+const LOTTERY_MIN = 5
 
 interface AdminAlbum extends Album {
   vote_count: number
@@ -121,9 +124,9 @@ export default function AdminPage() {
               <div className="col-span-3">Album</div>
               <div className="col-span-1 text-center">Fotos</div>
               <div className="col-span-1 text-center">Sichtbar</div>
-              <div className="col-span-2 text-center">Voting</div>
-              <div className="col-span-2">Zeitraum</div>
+              <div className="col-span-1 text-center">Bewerten offen</div>
               <div className="col-span-1 text-center">Verlosung</div>
+              <div className="col-span-3">Verlosung bis</div>
               <div className="col-span-1 text-center">Stimmen</div>
             </div>
             {albums.map((album, index) => (
@@ -158,29 +161,25 @@ function AlbumRow({ album, onToggleVisible, onToggleVoting, onToggleLottery, onU
   onDragEnd: () => void
   isDragging: boolean
 }) {
-  const [editingDates, setEditingDates] = useState(false)
-  const [votingStart, setVotingStart] = useState(album.voting_start?.slice(0, 16) || '')
-  const [votingEnd, setVotingEnd] = useState(album.voting_end?.slice(0, 16) || '')
-  const status = getVotingStatus(album)
+  const [end, setEnd] = useState(album.lottery_end || '')
+  useEffect(() => setEnd(album.lottery_end || ''), [album.lottery_end])
 
-  const saveDates = async () => {
+  const saveEnd = async (value: string) => {
+    setEnd(value)
     await fetch(`/api/admin/albums/${album.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ voting_start: votingStart || null, voting_end: votingEnd || null }),
+      body: JSON.stringify({ lottery_end: value || null }),
     })
-    setEditingDates(false)
     onUpdated()
   }
 
-  const vStatusLabel = () => {
-    if (!album.voting_enabled) return { label: 'Aus', color: 'text-text-muted' }
-    if (status.isOpen) return { label: 'Offen', color: 'text-green-400' }
-    if (status.hasEnded) return { label: 'Beendet', color: 'text-text-muted' }
-    if (!status.hasStarted && status.startDate) return { label: 'Geplant', color: 'text-yellow-400' }
-    return { label: 'Aktiv', color: 'text-green-400' }
-  }
-  const vs = vStatusLabel()
+  const missing = Math.max(0, LOTTERY_MIN - album.lottery_count)
+  const lotteryState = album.lottery_drawn
+    ? { label: 'Gezogen', color: 'text-text-muted' }
+    : missing > 0
+      ? { label: `Noch ${missing} bis zur Anzeige`, color: 'text-yellow-400' }
+      : { label: 'Öffentlich sichtbar', color: 'text-green-400' }
 
   return (
     <div
@@ -203,36 +202,28 @@ function AlbumRow({ album, onToggleVisible, onToggleVoting, onToggleLottery, onU
       <div className="col-span-1 flex justify-center">
         <Toggle value={!!album.is_visible} onChange={onToggleVisible} />
       </div>
-      <div className="col-span-2 flex flex-col items-center gap-1">
+      <div className="col-span-1 flex justify-center">
         <Toggle value={!!album.voting_enabled} onChange={onToggleVoting} />
-        <span className={`text-xs ${vs.color}`}>{vs.label}</span>
-      </div>
-      <div className="col-span-2">
-        {editingDates ? (
-          <div className="space-y-1">
-            <input type="datetime-local" value={votingStart} onChange={e => setVotingStart(e.target.value)}
-              className="w-full bg-surface-2 border border-surface-3 px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-accent" />
-            <input type="datetime-local" value={votingEnd} onChange={e => setVotingEnd(e.target.value)}
-              className="w-full bg-surface-2 border border-surface-3 px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-accent" />
-            <div className="flex gap-1">
-              <button onClick={saveDates} className="text-xs bg-accent text-surface px-2 py-0.5">Speichern</button>
-              <button onClick={() => setEditingDates(false)} className="text-xs border border-surface-3 text-text-muted px-2 py-0.5">Abbrechen</button>
-            </div>
-          </div>
-        ) : (
-          <button onClick={() => setEditingDates(true)} className="text-left text-xs text-text-secondary hover:text-accent w-full">
-            {album.voting_start ? (
-              <div>
-                <div>Von: {new Date(album.voting_start).toLocaleDateString('de-CH')}</div>
-                {album.voting_end && <div>Bis: {new Date(album.voting_end).toLocaleDateString('de-CH')}</div>}
-              </div>
-            ) : <span className="text-text-muted">Kein Datum - klicken</span>}
-          </button>
-        )}
       </div>
       <div className="col-span-1 flex flex-col items-center gap-1">
         <Toggle value={!!album.lottery_enabled} onChange={onToggleLottery} />
-        {album.lottery_enabled && <span className="text-xs text-text-muted">{album.lottery_count} TN</span>}
+        {!!album.lottery_enabled && <span className="text-xs text-text-muted">{album.lottery_count} TN</span>}
+      </div>
+      <div className="col-span-3">
+        {album.lottery_enabled ? (
+          <div className="space-y-1">
+            <input
+              type="date"
+              value={end}
+              disabled={!!album.lottery_drawn}
+              onChange={e => saveEnd(e.target.value)}
+              className="bg-surface-2 border border-surface-3 px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-accent disabled:opacity-50"
+            />
+            <div className={`text-xs ${lotteryState.color}`}>{lotteryState.label}</div>
+          </div>
+        ) : (
+          <span className="text-text-muted text-xs">–</span>
+        )}
       </div>
       <div className="col-span-1 text-center flex flex-col items-center gap-1">
         <span className="text-accent font-display text-lg">{album.vote_count}</span>
