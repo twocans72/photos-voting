@@ -15,6 +15,10 @@ function getTransport(): nodemailer.Transporter {
       host: process.env.SMTP_HOST,
       port,
       secure: port === 465,
+      // Kurze Fristen: ein nicht erreichbarer Mailserver soll die Anfrage nicht minutenlang blockieren.
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 20000,
       auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined,
     })
   }

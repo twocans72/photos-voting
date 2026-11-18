@@ -21,6 +21,11 @@ Stand: 18.11.2026 (Umbau auf Wand, Konten und Benachrichtigungen).
 
 Die SMTP-Variablen müssen in `docker-compose.yml` an den Container durchgereicht werden (seit dem Umbau der Fall).
 
+Zwei Stolpersteine auf der NAS (beide am 18.11.2026 behoben):
+
+- **Port:** Von der NAS aus ist Port 587 nicht erreichbar, Port 465 schon. In der `.env` der NAS steht deshalb `SMTP_PORT=465`.
+- **Dollarzeichen im Passwort:** Docker Compose ersetzt `$...` in doppelt angeführten `.env`-Werten. Das SMTP-Passwort steht deshalb in einfachen Anführungszeichen.
+
 ## Hintergrund-Takt
 
 `scripts/worker.js` läuft im Container neben dem Server und ruft alle 10 Minuten `POST /api/cron/tick` auf. Der Takt (`src/lib/sync.ts`):
